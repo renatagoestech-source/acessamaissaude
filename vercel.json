@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/index.php": {
+      "runtime": "vercel-php@0.9.0",
+      "maxDuration": 60
+    },
+    "api/api.php": {
+      "runtime": "vercel-php@0.9.0",
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    {
+      "src": "/api.php",
+      "dest": "/api/api.php"
+    },
+    {
+      "src": "/(.*\\.(?:css|js|png|jpg|jpeg|webp|svg|ico|txt|sql))",
+      "dest": "/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/index.php"
+    }
+  ]
+}

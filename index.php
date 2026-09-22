@@ -1,0 +1,241 @@
+<?php
+// Acessa+ Saúde - plataforma web de agendamento e acompanhamento de saúde.
+?>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Acessa+ Saúde | Agendamento e informações de saúde</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell guest-mode" id="appShell">
+    <aside class="sidebar">
+        <div class="brand brand-top-logo">
+            <img src="img/logo.png" alt="Acessa+ Saúde" onerror="this.style.display='none';this.nextElementSibling.style.display='block'">
+            <strong class="brand-fallback">Acessa+<br><span>Saúde</span></strong>
+        </div>
+        <nav class="side-nav">
+            <button class="nav-item active" onclick="irDashboard()"><span>⌂</span> Início</button>
+            <button class="nav-item" onclick="iniciarAgendamento()"><span>▣</span> Agendar consulta</button>
+            <button class="nav-item" onclick="mostrarAgendamentos()"><span>▤</span> Minhas consultas</button>
+            <button class="nav-item" onclick="mostrarExames()"><span>⌁</span> Resultados de exames</button>
+            <button class="nav-item" onclick="mostrarUBSMenu()"><span>♜</span> UBS</button>
+            <button class="nav-item" onclick="mostrarAvisos()"><span>⚑</span> Campanhas e avisos</button>
+            <button class="nav-item" onclick="mostrarAjuda()"><span>?</span> Ajuda</button>
+        </nav>
+        <div class="sidebar-note">
+            <span>♡</span>
+            <strong>Cuidar de você<br>também é o nosso compromisso!</strong>
+        </div>
+        <div class="sidebar-footer">Acessa+ Saúde<br><small>Informação e cuidado ao seu alcance</small></div>
+    </aside>
+
+    <div class="content-area">
+        <header class="topbar">
+            <div class="search-box"><span>⌕</span><input id="buscaSite" type="search" placeholder="Busque por especialidades, UBS, serviços..."></div>
+            <div class="top-actions">
+                <button class="icon-button" onclick="verificarNotificacoes()">♧<i>2</i></button>
+                <button id="adminTopEntry" class="btn secondary admin-entry admin-only-entry" onclick="abrirLogin()">Acesso administrativo</button>
+                <div id="patientProfileMenuWrap" class="profile-menu-wrap hidden">
+                    <button class="profile-button" onclick="alternarMenuPaciente()"><span class="avatar">♙</span><span><b id="nomeTopo">Olá!</b><small>Paciente</small></span><em>⌄</em></button>
+                    <div id="patientMenu" class="patient-menu hidden">
+                        <button onclick="irDashboard(); fecharMenuPaciente()">Minha área</button>
+                        <button onclick="mostrarPerfilPaciente(); fecharMenuPaciente()">Perfil</button>
+                        <button class="logout-link" onclick="sairPaciente()">Sair e voltar ao cadastro</button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <section class="card page-section" id="portalChooserSection">
+                <div class="database-setup portal-chooser">
+                    <img src="img/logo.png" class="registration-hero-logo" alt="Acessa+ Saúde">
+                    <span class="eyebrow">ACESSA+ SAÚDE</span>
+                    <h1>Escolha como você deseja acessar</h1>
+                    <p>Os atendimentos públicos e particulares funcionam em espaços separados para proteger os dados e facilitar o agendamento.</p>
+                    <div class="portal-choice-grid">
+                        <div class="portal-choice"><strong>UBS / rede pública</strong><span>Escolha uma UBS, informe seu Cartão SUS e agende pela rede pública.</span><div class="portal-choice-actions"><button class="btn primary" onclick="entrarPortalUBS()">Paciente SUS</button></div></div>
+                        <button class="portal-choice" onclick="abrirLoginProfissional()"><strong>Profissional / clínica</strong><span>Entre na sua conta profissional ou crie seu cadastro para administrar sua clínica, agenda e link público.</span></button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="card page-section hidden" id="publicClinicSection"><div class="public-clinic-hero"><img src="img/logo.png" class="public-system-logo" alt="Acessa+ Saúde"><img src="img/logo.png" id="publicClinicLogo" class="registration-hero-logo clinic-public-logo" alt="Clínica"><span class="eyebrow">AGENDAMENTO PARTICULAR</span><h1 id="publicClinicName">Clínica</h1><p id="publicClinicPresentation"></p><p id="publicClinicDetails"></p><div id="publicClinicNotice" class="public-clinic-notice"></div></div><div id="publicClinicConfirmation" class="clinic-confirmation hidden"></div><div class="registration-box public-clinic-form"><h2>Solicitar consulta</h2><p class="subtitle">Preencha seus dados. A clínica receberá a solicitação e confirmará o horário.</p><label>Nome completo</label><input id="publicPatientName"><label>E-mail</label><input id="publicPatientEmail" type="email"><label>CPF</label><input id="publicPatientCpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"><small class="field-help">Usaremos o CPF para localizar e agrupar seu histórico na clínica.</small><label>Celular</label><input id="publicPatientPhone"><label>Data desejada</label><input id="publicPatientDate" type="date"><label>Horário desejado</label><input id="publicPatientTime" type="time"><label>Assunto da consulta</label><textarea id="publicPatientSubject" placeholder="Informe brevemente o motivo da consulta"></textarea><button class="btn primary full" onclick="solicitarConsultaClinica()">Enviar solicitação</button><button class="btn secondary full" onclick="sairPaginaClinica()">Sair / limpar acesso</button></div></section>
+
+            <!-- CONFIGURAÇÃO DO BANCO -->
+            <section class="card page-section" id="databaseSetupSection">
+                <div class="database-setup">
+                    <span class="eyebrow">CONFIGURAÇÃO NECESSÁRIA</span>
+                    <h1>Banco de dados ainda não conectado</h1>
+                    <p id="databaseSetupMessage">O sistema está verificando a conexão com o MySQL.</p>
+                    <div class="database-steps">
+                        <div><b>1</b><span>Inicie o Apache e o MySQL no XAMPP.</span></div>
+                        <div><b>2</b><span>Abra o instalador para criar o banco <strong>conecta_saude</strong>.</span></div>
+                        <div><b>3</b><span>Volte para esta página e atualize o navegador.</span></div>
+                    </div>
+                    <div class="actions database-actions">
+                        <a class="btn primary" href="install.php">Instalar banco de dados</a>
+                        <a class="btn secondary" href="diagnostico_xampp.php">Ver diagnóstico do XAMPP</a>
+                    </div>
+                    <p class="database-note">Se o MySQL usa outra porta ou senha, veja as instruções no arquivo <strong>ATUALIZACAO.txt</strong>.</p>
+                </div>
+            </section>
+
+            <!-- DASHBOARD DO PACIENTE -->
+            <section id="dashboardSection" class="page-section hidden">
+                <section class="welcome-hero">
+                    <div class="hero-copy">
+                        <img src="img/logo.png" class="hero-logo" alt="Acessa+ Saúde">
+                        <span class="eyebrow">TECNOLOGIA • CUIDADO • ACESSO</span>
+                        <h1>Olá, <span id="nomeDashboard">Paciente</span>!</h1>
+                        <p>Sua saúde merece atenção. Acesse seus agendamentos, acompanhe seu histórico e consulte seus resultados em um só lugar.</p><p class="current-ubs-label"><span id="modoSistemaLabel">Modo UBS / rede pública</span> • <strong id="ubsAtualDashboard">UBS de referência: Não informada</strong></p>
+                        <div class="hero-pills"><span>✓ Mais acesso</span><span>+</span><span>✓ Mais cuidado</span><span>+</span><span>✓ Uma saúde melhor</span></div>
+                    </div>
+                    <div class="hero-art"><div class="heart-mark">♡<b>+</b></div><div>Tecnologia<br>e cuidado<br>lado a lado<br>com você!</div></div>
+                </section>
+
+                <div class="quick-grid">
+                    <button class="quick-card" onclick="iniciarAgendamento()"><span class="quick-icon">▣</span><strong>Agendar consulta</strong><small>Escolha UBS, especialidade e horário.</small><b>→</b></button>
+                    <button class="quick-card" onclick="mostrarAgendamentos()"><span class="quick-icon">▤</span><strong>Minhas consultas</strong><small>Veja consultas marcadas e realizadas.</small><b>→</b></button>
+                    <button class="quick-card" onclick="mostrarUBSMenu()"><span class="quick-icon">♜</span><strong>UBS</strong><small>Encontre informações da sua unidade.</small><b>→</b></button>
+                    <button class="quick-card" onclick="mostrarExames()"><span class="quick-icon">⌁</span><strong>Resultados de exames</strong><small>Acesse seus resultados disponibilizados.</small><b>→</b></button>
+                </div>
+
+                <div class="dashboard-grid">
+                    <section class="panel upcoming-panel">
+                        <div class="panel-title"><h2>Próximas consultas</h2><button onclick="mostrarAgendamentos()">Ver todas</button></div>
+                        <div id="dashboardProximas"></div>
+                    </section>
+                    <section class="panel notice-panel">
+                        <div class="panel-title"><h2>Quadro de avisos</h2><button onclick="mostrarAvisos()">Ver todos</button></div>
+                        <div id="dashboardAvisos"></div>
+                    </section>
+                    <section class="panel campaign-panel">
+                        <div class="panel-title"><h2>Campanhas em andamento</h2></div>
+                        <div class="campaign-card"><div class="campaign-symbol">✚</div><strong>Informação e prevenção</strong><p>Acompanhe as campanhas e orientações da sua UBS.</p><button onclick="mostrarAvisos()">Saiba mais</button></div>
+                    </section>
+                </div>
+
+                <div class="service-strip">
+                    <div><span>♢</span><b>UBS</b><small>Unidades de atendimento</small></div>
+                    <div><span>♙</span><b>Equipe qualificada</b><small>Profissionais e serviços</small></div>
+                    <div><span>◷</span><b>Horários</b><small>Confira o funcionamento</small></div>
+                    <div><span>▤</span><b>Documentos</b><small>Saiba o que levar</small></div>
+                </div>
+            </section>
+
+            <!-- CADASTRO -->
+            <section class="card page-section" id="cadastro">
+                <div class="registration-layout">
+                    <div class="registration-copy">
+                        <img src="img/logo.png" class="registration-hero-logo" alt="Acessa+ Saúde">
+                        <span class="eyebrow">BEM-VINDO AO ACESSA+ SAÚDE</span>
+                        <h1>Seu cuidado mais simples, digital e acessível.</h1>
+                        <p>Faça seu cadastro para agendar consultas e acompanhar suas consultas e resultados de exames.</p>
+                        <div class="feature-list"><div>✓ Agendamento de consultas</div><div>✓ Histórico de atendimentos</div><div>✓ Resultados de exames</div><div>✓ Informações das UBS</div></div>
+                    </div>
+                    <div class="registration-box">
+                        <h2>Identificação</h2><p class="subtitle">Informe seus dados para entrar na sua área do paciente.</p>
+                        <label>Nome completo</label><input id="nomePaciente" type="text" placeholder="Digite seu nome completo">
+                        <label>CPF</label><input id="cpfPaciente" type="text" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"><label>Celular</label><input id="telefonePaciente" type="tel" placeholder="(00) 00000-0000">
+                        <label>Cartão SUS</label><input id="susPaciente" type="text" maxlength="15" placeholder="Digite o número do Cartão SUS"><label>UBS de referência</label><select id="ubsPaciente"><option value="">Selecione sua UBS</option></select><small class="field-help">Escolha a unidade onde você deseja ser atendido.</small>
+                        <button class="btn primary full" onclick="salvarPaciente()">Entrar na minha área →</button>
+                        <button id="adminCardEntry" class="btn secondary full admin-entry-card admin-only-entry" onclick="abrirLogin()">Acesso UBS / Desenvolvedor</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- PERFIL DO PACIENTE -->
+            <section class="card page-section hidden" id="perfilSection">
+                <div class="section-title"><div><span class="eyebrow">MEU PERFIL</span><h2>Informações importantes de saúde</h2><p class="subtitle">Mantenha seus dados atualizados para facilitar o atendimento.</p></div><button class="btn back" onclick="irDashboard()">← Minha área</button></div>
+                <div class="profile-form-grid">
+                    <div><label>Nome completo</label><input id="perfilNome" type="text"></div>
+                    <div><label>Celular</label><input id="perfilTelefone" type="tel"></div>
+                    <div><label>Data de nascimento</label><input id="perfilNascimento" type="date"></div>
+                    <div><label>Endereço</label><input id="perfilEndereco" type="text" placeholder="Rua, número, bairro, cidade"></div>
+                </div>
+                <label>Condições de saúde preexistentes</label><textarea id="perfilCondicoes" placeholder="Ex.: diabetes, hipertensão, asma. Se não houver, escreva Não tenho."></textarea>
+                <label>Alergias e restrições</label><textarea id="perfilAlergias" placeholder="Medicamentos, alimentos ou outras alergias importantes"></textarea>
+                <label>Medicamentos em uso</label><textarea id="perfilMedicamentos" placeholder="Informe medicamentos contínuos ou tratamentos relevantes"></textarea>
+                <label>Outras informações importantes</label><textarea id="perfilInformacoes" placeholder="Outras informações que deseja comunicar à equipe de atendimento"></textarea>
+                <div class="actions"><button class="btn primary" onclick="salvarPerfilPaciente()">Salvar perfil</button><button class="btn secondary" onclick="irDashboard()">Cancelar</button></div>
+            </section>
+
+            <!-- UBS -->
+            <section class="card page-section hidden" id="ubsSection"><div class="section-title"><div><span class="eyebrow">MINHA UNIDADE</span><h2 id="ubsSectionTitle">Sua UBS de referência</h2><p class="subtitle">Consulte as informações da unidade escolhida no cadastro.</p></div><button class="btn back" onclick="irDashboard()">← Início</button></div><div id="ubsGrid" class="ubs-grid"></div></section>
+
+            <section class="card page-section hidden" id="ubsDetalhes">
+                <button class="btn back" onclick="voltarUBS()">← Voltar para UBS</button>
+                <div class="ubs-header"><img src="img/logo.png" class="receipt-logo" alt="Acessa+ Saúde"><span class="tag">UNIDADE SELECIONADA</span><h2 id="detalheNomeUBS"></h2><p id="detalheEndereco"></p><p id="detalheTelefone"></p><p id="detalheHorario"></p></div>
+                <div class="info-grid"><div class="info-box"><h3>🏥 Serviços oferecidos</h3><ul id="detalheServicos"></ul></div><div class="info-box"><h3>💉 Campanhas</h3><ul id="detalheCampanhas"></ul></div><div class="info-box"><h3>📄 Documentos necessários</h3><ul id="detalheDocumentos"></ul></div><div class="info-box"><h3>👩‍⚕️ Funcionários</h3><ul id="detalheFuncionarios"></ul></div></div>
+                <button class="btn primary" onclick="irEspecialidades()">Continuar para especialidades →</button>
+            </section>
+
+            <section class="card page-section hidden" id="especialidadeSection"><button class="btn back" onclick="voltarDetalhes()">← Voltar</button><span class="eyebrow">AGENDAMENTO</span><h2>Escolha a especialidade</h2><p class="subtitle" id="especialidadeUBSText"></p><div id="especialidadesGrid" class="option-grid"></div></section>
+
+            <section class="card page-section hidden" id="agendaSection"><button class="btn back" onclick="voltarEspecialidades()">← Voltar</button><span class="eyebrow">AGENDAMENTO POR FILA</span><h2>Fale sobre a consulta</h2><p id="agendaInfo" class="subtitle"></p><label for="consultaAssunto">Assunto ou motivo da consulta</label><textarea id="consultaAssunto" placeholder="Ex.: pré-natal, citologia, acompanhamento de hipertensão, vacinação..."></textarea><small class="field-help">Essa informação ajuda a equipe a preparar seu atendimento.</small><h2 class="agenda-date-title">Escolha a data</h2><div class="calendar-header"><button onclick="mesAnterior()">‹</button><strong id="mesAtual"></strong><button onclick="mesProximo()">›</button></div><div id="calendar" class="calendar"></div><div id="filaDisponibilidade" class="queue-box"><h3>Escolha um dia para ver a fila</h3><p>São 12 vagas por dia para cada especialidade. A posição é definida pela ordem do agendamento.</p></div></section>
+
+            <section class="card page-section hidden" id="confirmacaoSection"><div class="success"><img src="img/logo.png" class="receipt-logo" alt="Acessa+ Saúde"><div class="success-icon">✓</div><h2>Consulta agendada!</h2><p>Sua consulta foi registrada com sucesso.</p></div><div id="comprovante" class="receipt"></div><div class="actions"><button class="btn primary" onclick="imprimirComprovante()">🖨 Imprimir comprovante</button><button class="btn secondary" onclick="mostrarAgendamentos()">Minhas consultas</button></div></section>
+
+            <!-- CONSULTAS DO PACIENTE -->
+            <section class="card page-section hidden" id="meusAgendamentos"><div class="section-title"><div><span class="eyebrow">ÁREA DO PACIENTE</span><h2>Minhas consultas</h2><p class="subtitle">Acompanhe consultas marcadas, realizadas e canceladas.</p></div><button class="btn back" onclick="irDashboard()">← Início</button></div><div class="stats-row"><div><b id="countProximas">0</b><span>Marcadas</span></div><div><b id="countRealizadas">0</b><span>Realizadas</span></div><div><b id="countCanceladas">0</b><span>Canceladas</span></div></div><div class="history-tabs"><button class="active" onclick="filtrarHistorico('todas',this)">Todas</button><button onclick="filtrarHistorico('agendado',this)">Marcadas</button><button onclick="filtrarHistorico('atendido',this)">Que eu fui</button><button onclick="filtrarHistorico('cancelado',this)">Canceladas</button></div><div id="listaAgendamentos"></div></section>
+
+            <!-- EXAMES -->
+            <section class="card page-section hidden" id="examesSection"><div class="section-title"><div><span class="eyebrow">ÁREA DO PACIENTE</span><h2>Resultados de exames</h2><p class="subtitle">Resultados disponibilizados pela unidade de atendimento.</p></div><button class="btn back" onclick="irDashboard()">← Início</button></div><div id="listaExames"></div></section>
+
+            <!-- AVISOS -->
+            <section class="card page-section hidden" id="avisosSection"><div class="section-title"><div><span class="eyebrow">INFORMAÇÃO</span><h2>Campanhas e avisos</h2><p class="subtitle">Confira campanhas e informações das unidades.</p></div><button class="btn back" onclick="irDashboard()">← Início</button></div><div id="listaAvisos"></div></section>
+            <section class="card page-section hidden" id="ajudaSection"><div class="section-title"><div><span class="eyebrow">CENTRAL DE AJUDA</span><h2>Como usar o Acessa+ Saúde</h2><p class="subtitle">Orientações rápidas para pacientes e unidades.</p></div><button class="btn back" onclick="irDashboard()">← Início</button></div><div class="help-grid"><div class="info-box"><h3>Agendar consulta</h3><p>Escolha a especialidade, descreva o motivo do atendimento, selecione uma data e confirme sua posição na fila.</p></div><div class="info-box"><h3>Minha UBS</h3><p>O paciente vê somente a unidade escolhida no cadastro. Para alterar a unidade, saia e faça um novo cadastro com confirmação.</p></div><div class="info-box"><h3>Resultados</h3><p>Exames publicados pela sua UBS aparecem na área de resultados. Anexos podem ser abertos com acesso protegido.</p></div><div class="info-box"><h3>Suporte</h3><p>Envie sua dúvida pelo botão de suporte e guarde o protocolo para acompanhar a resposta.</p></div></div></section>
+            <section id="professionalSection" class="card page-section hidden">
+                <div class="section-title"><div><span class="eyebrow">PORTAL PROFISSIONAL</span><h2>Olá, <span id="professionalNomeTopo">profissional</span></h2><p class="subtitle">Pacientes, agenda, prontuários, personalização, relacionamento e assinatura.</p></div><button class="btn danger" onclick="sairProfissional()">Sair</button></div>
+                <div class="admin-tabs professional-tabs"><button onclick="abrirPortalProfissional('dashboard')">Resumo</button><button onclick="abrirPortalProfissional('pacientes')">Pacientes</button><button onclick="abrirPortalProfissional('agenda')">Agenda</button><button onclick="abrirPortalProfissional('financeiro')">Financeiro</button><button onclick="abrirPortalProfissional('relacionamento')">Pós-venda</button><button onclick="abrirPortalProfissional('prontuarios')">Prontuários</button><button onclick="abrirPortalProfissional('marca')">Minha marca</button><button onclick="abrirPortalProfissional('assinatura')">Assinatura</button></div>
+                <div id="profDashboard" class="professional-tab"><div class="stats-row"><div><b id="profCountPatients">0</b><span>Pacientes vinculados</span></div><div><b id="profCountAppointments">0</b><span>Consultas</span></div><div><b id="profSubscriptionStatusResumo">Pendente</b><span>Assinatura</span></div></div><div class="info-box"><strong>Isolamento ativo:</strong> este portal consulta somente pacientes, agenda e prontuários vinculados à sua conta profissional.</div></div>
+                <div id="profPacientes" class="professional-tab hidden">
+<div class="admin-section-title"><h3>Meus pacientes</h3><div><input id="profPatientSus" placeholder="Cartão SUS para vincular"><button class="btn primary" onclick="vincularPacienteProfissional()">Vincular</button></div></div>
+<div class="info-box"><strong>Paciente novo sem agendamento:</strong> cadastre diretamente aqui quando ele chegar à clínica.</div>
+<div class="form-grid"><div><label>Nome completo</label><input id="novoPacienteNome" placeholder="Nome do paciente"></div><div><label>Telefone</label><input id="novoPacienteTelefone" placeholder="Telefone"></div><div><label>CPF</label><input id="novoPacienteCpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"></div><div><label>E-mail</label><input id="novoPacienteEmail" type="email" placeholder="E-mail"></div><div><label>Cartão SUS (opcional)</label><input id="novoPacienteSus" placeholder="Se possuir"></div></div>
+<button class="btn primary" onclick="cadastrarPacienteNovo()">Cadastrar paciente novo</button>
+<div id="profPatientsList"></div><div id="profPatientHistory" class="hidden"></div></div>
+                <div id="profAgenda" class="professional-tab hidden"><div class="admin-section-title"><div><h3>Calendário da clínica</h3><p class="subtitle">As consultas são confirmadas automaticamente e entram no calendário assim que são marcadas.</p></div><button class="btn secondary" onclick="carregarAgendaProfissional()">Atualizar</button></div><div class="calendar-toolbar"><button class="btn secondary" onclick="mudarMesAgenda(-1)">← Mês anterior</button><h3 id="agendaMesTitulo"></h3><button class="btn secondary" onclick="mudarMesAgenda(1)">Próximo mês →</button></div><div class="calendar-legend"><span><i class="calendar-dot confirmed"></i> Confirmada</span><span><i class="calendar-dot attended"></i> Atendida</span><span><i class="calendar-dot canceled"></i> Cancelada</span></div><div id="professionalCalendar" class="professional-calendar"></div><div id="agendaDiaSelecionado" class="info-box"></div><div class="admin-section-title"><h3>Marcar nova consulta</h3></div><div class="form-grid"><div><label>Paciente</label><select id="profAgendaPaciente"></select></div><div><label>Data</label><input id="profAgendaData" type="date"></div><div><label>Horário</label><input id="profAgendaHorario" type="time"></div></div><label>Assunto</label><textarea id="profAgendaAssunto" placeholder="Motivo da consulta"></textarea><button class="btn primary" onclick="criarConsultaProfissional()">Confirmar e colocar no calendário</button><div id="profAppointmentsList"></div></div>
+                <div id="profRelacionamento" class="professional-tab hidden">
+    <div class="admin-section-title"><div><h3>Relacionamento pós-venda</h3><p class="subtitle">Acompanhe os pacientes por CPF e abra o WhatsApp com uma mensagem padrão.</p></div><button class="btn secondary" onclick="carregarRelacionamentoProfissional()">Atualizar</button></div>
+    <div class="relationship-toolbar"><div class="info-box relationship-message-editor"><strong>Mensagem padrão do pós-venda</strong><p>Use <code>{nome}</code> e <code>{clinica}</code> para personalizar automaticamente.</p><textarea id="relMensagemPadrao" rows="4" placeholder="Olá, {nome}! Aqui é da clínica {clinica}. Gostaríamos de saber como você está após sua consulta."></textarea><button class="btn primary" onclick="salvarMensagemPosVenda()">Salvar mensagem padrão</button><small class="field-help" id="relMensagemStatus"></small></div><input id="relBusca" placeholder="Buscar por nome ou CPF" oninput="filtrarRelacionamentoProfissional()"></div>
+    <div id="relacionamentoResumo" class="stats-row"></div><div id="relationshipList"></div>
+</div>
+<div id="profFinanceiro" class="professional-tab hidden"><div class="admin-section-title"><div><h3>Financeiro</h3><p class="subtitle">Consulte os recebimentos e gere um relatório diário.</p></div><button class="btn secondary" onclick="carregarFinanceiroProfissional()">Pesquisar</button></div>
+<div class="form-grid"><div><label>Paciente/código</label><input id="finBusca" placeholder="Nome ou PAC..."></div><div><label>De</label><input id="finInicio" type="date"></div><div><label>Até</label><input id="finFim" type="date"></div><div><label>Forma de pagamento</label><select id="finForma"><option value="">Todas</option><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="cartao">Cartão</option><option value="boleto">Boleto</option></select></div></div>
+<div class="daily-report-box"><label>Relatório diário</label><div class="daily-report-actions"><input id="finRelatorioData" type="date"><button class="btn primary" onclick="gerarRelatorioDiario()">Gerar relatório do dia</button></div><small>O relatório mostra recebimentos, total e formas de pagamento e pode ser impresso.</small></div>
+<div class="info-box"><strong>Total recebido: R$ <span id="finTotal">0,00</span></strong><br><small>Lançamentos financeiros são permanentes e não podem ser alterados após o salvamento.</small></div>
+<div id="financeAppointmentsList"></div><div id="financeList"></div></div><div id="profProntuarios" class="professional-tab hidden"><h3>Prontuário isolado</h3><div class="form-grid"><div><label>Paciente agendado</label><select id="profRecordPaciente" onchange="carregarProntuariosProfissional();preencherCadastroPacienteProfissional()"></select></div><div><label>Tipo</label><input id="profRecordTipo" value="evolução"></div></div><div class="patient-completion"><h3>Cadastro complementar do paciente</h3><p class="subtitle">Complete estas informações somente para o paciente selecionado.</p><div class="form-grid"><div><label>Nome</label><input id="profPatientNome"></div><div><label>Celular</label><input id="profPatientTelefone"></div><div><label>E-mail</label><input id="profPatientEmail" type="email"></div><div><label>Data de nascimento</label><input id="profPatientNascimento" type="date"></div></div><label>Endereço</label><input id="profPatientEndereco"><label>Condições de saúde preexistentes</label><textarea id="profPatientCondicoes"></textarea><label>Alergias</label><textarea id="profPatientAlergias"></textarea><label>Medicamentos em uso</label><textarea id="profPatientMedicamentos"></textarea><label>Informações adicionais</label><textarea id="profPatientAdicionais"></textarea><button class="btn secondary" onclick="salvarCadastroPacienteProfissional()">Salvar cadastro do paciente</button></div><textarea id="profRecordContent" placeholder="Registro clínico da consulta"></textarea><button class="btn primary" onclick="salvarProntuarioProfissional()">Salvar registro</button><div id="profRecordsList"></div></div>
+                <div id="profMarca" class="professional-tab hidden"><h3>Personalização individual</h3><p class="info-box">Link público da clínica: <a id="profPublicLink" href="#" target="_blank" rel="noopener"></a></p><div class="form-grid"><div><label>Nome exibido</label><input id="profSetNome"></div><div><label>CNPJ</label><input id="profSetCnpj" placeholder="00.000.000/0000-00"></div><div><label>Especialidade</label><input id="profSetEspecialidade"></div><div><label>Registro profissional</label><input id="profSetRegistro"></div><div><label>Telefone</label><input id="profSetTelefone"></div><div><label>WhatsApp</label><input id="profSetWhatsapp"></div><div><label>Modalidade</label><input id="profSetModalidade"></div><div><label>Horário de funcionamento</label><input id="profSetHorario" placeholder="Segunda a sexta, 08h às 18h"></div><div><label>Valor da consulta</label><input id="profSetValor" type="number" min="0" step="0.01"></div><div><label>Cor principal</label><input id="profSetCor" type="color" value="#0fa7a7"></div></div><label>Endereço</label><input id="profSetEndereco"><label>Apresentação</label><textarea id="profSetApresentacao"></textarea><label>Aviso público para pacientes</label><textarea id="profSetAviso" placeholder="Ex.: Não atendemos convênios nesta unidade."></textarea><label>Logo da clínica</label><input id="profLogoFile" type="file" accept="image/png,image/jpeg,image/webp"><small class="field-help">PNG, JPG ou WEBP, até 5 MB.</small><button class="btn primary" onclick="salvarPerfilProfissional()">Salvar minha marca</button></div>
+                <div id="profAssinatura" class="professional-tab hidden"><h3>Planos e assinatura</h3><p class="subtitle">Área demonstrativa: escolha um plano para simular a liberação do acesso. Nenhuma cobrança real será criada.</p><div id="profSubscriptionStatus" class="info-box">Consultando assinatura...</div><div id="profPlansList" class="help-grid"></div><button class="btn secondary" onclick="cancelarAssinaturaProfissional()">Cancelar assinatura demonstrativa</button></div>
+            </section>
+        </main>
+    </div>
+</div>
+
+<button id="supportFab" type="button" class="support-fab" onclick="abrirSuporte()" aria-label="Abrir suporte ao paciente"><span>?</span> Suporte ao paciente</button><div id="paymentModal" class="modal hidden"><div class="modal-content"><button type="button" class="close" onclick="fecharPagamento()">×</button><span class="eyebrow">FINANCEIRO</span><h2>Registrar pagamento e recibo</h2><p class="subtitle">Após salvar, este lançamento financeiro não poderá ser alterado.</p><input id="pagConsultaId" type="hidden"><input id="pagPacienteId" type="hidden"><label>Valor recebido (R$)</label><input id="pagValor" type="number" min="0.01" step="0.01" placeholder="0,00"><label>Forma de pagamento</label><select id="pagForma" onchange="atualizarCamposCartao()"><option value="pix">PIX</option><option value="dinheiro">Dinheiro</option><option value="cartao">Cartão</option><option value="boleto">Boleto</option></select><div id="pagCartaoFields" class="hidden"><label>Tipo de cartão</label><select id="pagTipoCartao" onchange="atualizarCamposCartao()"><option value="credito">Crédito</option><option value="debito">Débito</option></select><label>Quantidade de parcelas</label><select id="pagParcelas"></select></div><button class="btn primary full" onclick="salvarPagamentoFormulario()">Salvar pagamento e gerar recibo</button></div></div><div id="supportModal" class="modal hidden"><div class="modal-content support-modal"><button type="button" class="close" onclick="fecharSuporte()">×</button><span class="eyebrow">ATENDIMENTO</span><h2>Como podemos ajudar?</h2><p class="subtitle">Envie sua dúvida ou dificuldade e guarde o protocolo para acompanhar a resposta.</p><label>Nome</label><input id="suporteNome" placeholder="Seu nome"><label>Celular</label><input id="suporteTelefone" placeholder="(00) 00000-00000"><label>Mensagem</label><textarea id="suporteMensagem" placeholder="Descreva o que aconteceu"></textarea><button type="button" class="btn primary full" onclick="enviarSuporte()">Enviar solicitação</button><button type="button" class="btn secondary full" onclick="carregarMeuSuporte()">Ver meus protocolos</button><div id="supportHistory" class="support-history"></div></div></div>
+
+<!-- LOGIN ADMIN -->
+<div id="loginModal" class="modal hidden"><div class="modal-content"><button class="close" onclick="fecharLogin()">×</button><span class="eyebrow">ACESSO RESTRITO</span><h2>Área administrativa</h2><p class="subtitle">Entre com seu usuário e senha.</p><label>Usuário</label><input id="loginUsuario" type="text" placeholder="Usuário"><label>Senha</label><input id="loginSenha" type="password" placeholder="Senha"><button class="btn primary full" onclick="realizarLogin()">Entrar</button><button class="btn secondary full" onclick="abrirLoginProfissional()">Entrar como profissional</button></div></div>
+
+<div id="professionalAuthModal" class="modal hidden"><div class="modal-content"><button class="close" onclick="fecharLoginProfissional()">×</button><span class="eyebrow">PORTAL PROFISSIONAL / CLÍNICA</span><h2>Área exclusiva da clínica</h2><div class="auth-switch"><button id="profAuthLoginTab" class="active" onclick="alternarAuthProfissional('login')">Entrar</button><button id="profAuthSignupTab" onclick="alternarAuthProfissional('signup')">Criar cadastro</button></div><label>E-mail profissional</label><input id="professionalEmail" type="email" placeholder="profissional@email.com"><label>Senha</label><input id="professionalSenha" type="password" placeholder="Mínimo de 8 caracteres"><div id="professionalSignupFields" class="hidden"><label>Nome profissional ou clínica</label><input id="professionalNome" placeholder="Nome completo ou clínica"><label>Especialidade</label><input id="professionalEspecialidade" placeholder="Ex.: Psicologia, Enfermagem"><small class="field-help">Seu cadastro criará um link público individual para os pacientes particulares agendarem.</small></div><button id="professionalLoginButton" class="btn primary full" onclick="loginProfissional()">Entrar na clínica</button><button id="professionalSignupButton" class="btn primary full hidden" onclick="cadastrarProfissional()">Criar conta profissional</button><small class="field-help">Este acesso é separado do login de UBS e do paciente SUS.</small></div></div>
+
+<!-- PAINEL ADMIN -->
+<div id="adminModal" class="modal hidden"><div class="modal-content admin-modal"><button class="close" onclick="fecharAdmin()">×</button><div class="admin-header"><div><span class="tag">PAINEL ADMINISTRATIVO</span><h2 id="adminTitulo">Administração</h2></div><button class="btn danger" onclick="logoutAdmin()">Sair</button></div><div id="seletorDesenvolvedor" class="hidden"><label>Selecionar UBS</label><select id="adminUBSSelect" onchange="trocarUBSAdmin()"></select><button class="btn secondary admin-new-ubs" onclick="abrirNovaUBSForm()">+ Adicionar outra UBS</button></div><div id="formNovaUBS" class="employee-form hidden"><h3>Nova UBS</h3><div class="form-grid"><div><label>Nome</label><input id="novaUBSNome"></div><div><label>Identificador</label><input id="novaUBSId" placeholder="Ex.: ubsG"></div><div><label>Endereço</label><input id="novaUBSEndereco"></div><div><label>Telefone</label><input id="novaUBSTelefone"></div><div><label>Horário</label><input id="novaUBSHorario" value="07:00 às 18:00"></div><div><label>Usuário de acesso</label><input id="novaUBSUsuario"></div><div><label>Senha inicial</label><input id="novaUBSSenha" type="password"></div></div><label>Especialidades</label><textarea id="novaUBSEspecialidades">Clínico Geral</textarea><div class="actions"><button class="btn primary" onclick="salvarNovaUBS()">Criar UBS</button><button class="btn secondary" onclick="fecharNovaUBSForm()">Cancelar</button></div></div><div class="admin-tabs"><button onclick="abrirAbaAdmin('dados')">Informações</button><button onclick="abrirAbaAdmin('funcionarios')">Funcionários</button><button onclick="abrirAbaAdmin('consultas')">Consultas</button><button onclick="abrirAbaAdmin('exames')">Resultados de exames</button><button id="adminConfigTab" class="hidden" onclick="abrirAbaAdmin('config')">Modo e personalização</button><button id="adminSuporteTab" class="hidden" onclick="abrirAbaAdmin('suporte')">Mensagens de suporte</button><button id="adminAuditoriaTab" class="hidden" onclick="abrirAbaAdmin('auditoria')">Auditoria</button></div>
+<div id="adminDados" class="admin-tab"><h3>Informações da UBS</h3><div class="form-grid"><div><label>Nome da UBS</label><input id="editNomeUBS"></div><div><label>Endereço</label><input id="editEndereco"></div><div><label>Telefone</label><input id="editTelefone"></div><div><label>Horário de funcionamento</label><input id="editHorario"></div></div><label>Especialidades</label><textarea id="editEspecialidades" placeholder="Uma especialidade por linha"></textarea><label>Serviços oferecidos</label><textarea id="editServicos" placeholder="Um serviço por linha"></textarea><label>Campanhas</label><textarea id="editCampanhas" placeholder="Uma campanha por linha"></textarea><label>Documentos necessários</label><textarea id="editDocumentos" placeholder="Um documento por linha"></textarea><h3>Login da UBS</h3><div class="form-grid"><div><label>Usuário</label><input id="editUsuario"></div><div><label>Senha</label><input id="editSenha"></div></div><button class="btn primary" onclick="salvarInformacoesUBS()">Salvar alterações</button></div>
+<div id="adminFuncionarios" class="admin-tab hidden"><div class="admin-section-title"><h3>Funcionários</h3><button class="btn primary" onclick="abrirFuncionarioForm()">+ Adicionar</button></div><div id="listaFuncionariosAdmin"></div><div id="formFuncionario" class="employee-form hidden"><h3 id="tituloFuncionarioForm">Novo funcionário</h3><input type="hidden" id="funcionarioId"><label>Nome</label><input id="funcionarioNome" placeholder="Nome completo"><label>Cargo / função</label><input id="funcionarioCargo" placeholder="Ex.: Enfermeira"><div class="actions"><button class="btn primary" onclick="salvarFuncionario()">Salvar</button><button class="btn secondary" onclick="fecharFuncionarioForm()">Cancelar</button></div></div></div>
+<div id="adminConsultas" class="admin-tab hidden"><h3>Consultas agendadas</h3><div class="filters"><input type="date" id="filtroData"><select id="filtroEspecialidade"><option value="">Todas as especialidades</option></select><button class="btn primary" onclick="renderConsultasAdmin()">Filtrar</button></div><div id="listaConsultasAdmin"></div></div>
+<div id="adminConfig" class="admin-tab hidden"><h3>Modo de operação e personalização</h3><p class="subtitle">Use UBS/rede pública ou profissional particular/clínica. O modo profissional reutiliza a agenda e permite personalizar a apresentação.</p><div class="form-grid"><div><label>Modo</label><select id="appModo"><option value="ubs">UBS / rede pública</option><option value="profissional">Profissional particular / clínica</option></select></div><div><label>Nome exibido</label><input id="appNomeExibicao" placeholder="Nome da UBS, profissional ou clínica"></div><div><label>Especialidade</label><input id="appEspecialidade"></div><div><label>Registro profissional</label><input id="appRegistro"></div><div><label>Telefone</label><input id="appTelefone"></div><div><label>WhatsApp</label><input id="appWhatsapp"></div><div><label>Endereço</label><input id="appEndereco"></div><div><label>Modalidade</label><input id="appModalidade" placeholder="Presencial, online ou domiciliar"></div><div><label>Valor da consulta</label><input id="appValor" type="number" min="0" step="0.01"></div><div><label>Cor principal</label><input id="appCorPrimaria" type="color" value="#0fa7a7"></div><div><label>Cor secundária</label><input id="appCorSecundaria" type="color" value="#075b5d"></div></div><label>Apresentação</label><textarea id="appApresentacao" placeholder="Texto público sobre o profissional ou serviço"></textarea><div class="actions"><button class="btn primary" onclick="salvarConfiguracaoApp()">Salvar configuração</button></div><div class="info-box"><strong>Importante:</strong> esta configuração personaliza o modo e a identidade. Para uso profissional real, ainda é necessário configurar consentimento, prontuário conforme a profissão e meios de pagamento.</div><hr><div class="admin-section-title"><h3>Pagamentos profissionais</h3><button class="btn secondary" onclick="carregarPagamentosProfissionais()">Atualizar pagamentos</button></div><div id="listaPagamentosProfissionais"></div></div>
+<div id="adminSuporte" class="admin-tab hidden"><div class="admin-section-title"><div><h3>Mensagens de suporte</h3><p class="subtitle">Demandas enviadas pelos pacientes para atendimento do desenvolvedor.</p></div><div><select id="filtroSuporte" onchange="carregarSuporteAdmin()"><option value="">Todas</option><option value="aberto">Abertas</option><option value="em_atendimento">Em atendimento</option><option value="resolvido">Resolvidas</option></select><button class="btn secondary" onclick="carregarSuporteAdmin()">Atualizar</button></div></div><div id="listaSuporteAdmin"></div></div>
+<div id="adminAuditoria" class="admin-tab hidden"><div class="admin-section-title"><div><h3>Auditoria do sistema</h3><p class="subtitle">Registro das ações administrativas.</p></div><button class="btn secondary" onclick="carregarAuditoria()">Atualizar</button></div><div id="listaAuditoria"></div></div>
+<div id="adminExames" class="admin-tab hidden"><div class="admin-section-title"><div><h3>Resultados de exames</h3><p class="subtitle">Cadastre o resultado para o paciente consultar na área dele.</p></div><button class="btn primary" onclick="abrirExameForm()">+ Novo resultado</button></div><div id="formExame" class="employee-form hidden"><h3>Novo resultado</h3><label>Cartão SUS do paciente</label><input id="exameSus" placeholder="Número do Cartão SUS"><label>Nome do exame</label><input id="exameNome" placeholder="Ex.: Hemograma completo"><label>Data do exame</label><input id="exameData" type="date"><label>Resultado</label><textarea id="exameResultado" placeholder="Digite o resultado ou observações do profissional"></textarea><label>Observações</label><textarea id="exameObservacoes" placeholder="Orientações adicionais, se houver"></textarea><label>Anexo do resultado <small>(PDF, JPG ou PNG, até 10 MB)</small></label><input id="exameArquivo" type="file" accept="application/pdf,image/jpeg,image/png"><div class="actions"><button class="btn primary" onclick="salvarResultadoExame()">Salvar resultado</button><button class="btn secondary" onclick="fecharExameForm()">Cancelar</button></div></div><div id="listaExamesAdmin"></div></div>
+</div></div>
+<div id="toast"></div>
+<script src="script.js"></script>
+</body>
+</html>
