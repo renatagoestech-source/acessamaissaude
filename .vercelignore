@@ -1,0 +1,8 @@
+# Arquivos de desenvolvimento/documentação não necessários no runtime
+/.env*
+/**/*.sql
+/*.sql
+/*.md
+/*.txt
+/install.php
+/diagnostico_xampp.php

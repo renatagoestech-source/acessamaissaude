@@ -41,3 +41,99 @@
 .notification-planned{font-size:12px;color:#087f82;background:#e8f8f6;border-radius:8px;padding:7px 10px;margin-top:8px}.daily-report-box small{color:#6f898c}
 
 #financeAppointmentsList{margin-top:20px}.asaas-checkout-note{background:#e8f8f6;color:#17666a;padding:10px;border-radius:8px}
+
+/* Camada visual das experiências públicas e personalizáveis */
+.clinic-public-shell{background:linear-gradient(180deg,#fbffff 0%,#f1faf9 100%);border:0;padding:18px;overflow:hidden}
+.clinic-public-hero{position:relative;padding:30px 34px 34px;border-radius:24px;background:radial-gradient(circle at 90% 8%,color-mix(in srgb,var(--clinic-primary) 18%,#fff),transparent 34%),linear-gradient(135deg,color-mix(in srgb,var(--clinic-primary) 10%,#fff),#fff 58%,color-mix(in srgb,var(--clinic-secondary) 8%,#fff));border:1px solid color-mix(in srgb,var(--clinic-primary) 18%,#fff);box-shadow:0 18px 45px rgba(4,79,82,.1);margin-bottom:22px}
+.clinic-brandbar{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:28px}.platform-signature{display:flex;align-items:center;gap:10px;color:#6a8587;font-size:11px;font-weight:800;letter-spacing:.4px}.platform-signature .public-system-logo{width:98px;margin:0;opacity:.78}.clinic-public-tag{padding:8px 12px;border-radius:99px;background:color-mix(in srgb,var(--clinic-primary) 12%,#fff);color:var(--clinic-secondary);font-size:10px;font-weight:900;letter-spacing:1px}.clinic-hero-grid{display:grid;grid-template-columns:1fr 260px;align-items:center;gap:34px}.clinic-hero-copy h1{font-size:clamp(32px,5vw,54px);line-height:1.02;color:var(--clinic-secondary);margin:9px 0 13px}.clinic-hero-copy>p:not(.clinic-details){max-width:680px;font-size:18px;line-height:1.55;color:#476f72}.clinic-details{margin-top:20px;color:var(--clinic-secondary);font-weight:700;line-height:1.7}.clinic-logo-card{min-height:0;display:flex;align-items:center;justify-content:center;padding:0;background:transparent;border:0;box-shadow:none;text-align:center}.clinic-public-logo{display:block;width:320px;max-width:100%;max-height:260px;height:auto;object-fit:contain;margin:0}.public-clinic-notice{border-left:4px solid var(--clinic-primary);background:rgba(255,255,255,.76);color:#5f5c3c;margin-top:22px}.public-booking-grid{display:grid;grid-template-columns:.78fr 1.22fr;gap:22px;align-items:start}.booking-intro{padding:28px 20px 20px 10px}.booking-intro h2{font-size:32px;color:var(--clinic-secondary);margin:9px 0 13px}.booking-intro>p{color:#628084;line-height:1.65;font-size:16px}.booking-benefits{display:grid;gap:12px;margin-top:24px;color:var(--clinic-secondary);font-size:13px;font-weight:800}.booking-benefits span{padding:12px 14px;background:#fff;border:1px solid #e0eeee;border-radius:12px}.public-clinic-form{max-width:none;margin:0;background:rgba(255,255,255,.92);box-shadow:0 14px 36px rgba(4,79,82,.08);border-color:#d8eeee}.form-heading{display:flex;align-items:center;gap:12px;margin-bottom:3px}.form-heading h2{color:var(--clinic-secondary)}.form-step{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--clinic-primary);color:#fff;font-size:12px;font-weight:900}.form-heading .subtitle{margin-bottom:9px}.public-clinic-form .btn.primary{background:linear-gradient(135deg,var(--clinic-primary),var(--clinic-secondary))}.privacy-note{display:block;margin-top:14px;text-align:center;color:#8aa0a1;font-size:11px}.registration-layout{position:relative;overflow:hidden;border-radius:24px;background:radial-gradient(circle at 0 0,#dff7f4 0,transparent 36%),linear-gradient(135deg,#fff 0%,#f5fcfb 65%,#e8f8f6 100%);padding:28px 38px;box-shadow:0 18px 45px rgba(4,79,82,.08)}.registration-layout:after{content:'+';position:absolute;right:-36px;top:8px;font-size:270px;font-weight:900;color:var(--mint);opacity:.7;pointer-events:none}.registration-copy,.registration-box{position:relative;z-index:1}.registration-copy{padding:12px 18px}.registration-badge{display:flex;align-items:center;gap:12px;margin-bottom:24px}.registration-badge .registration-hero-logo{width:190px;margin:0}.registration-badge>span{padding:7px 11px;border-radius:99px;background:#e4f8f5;color:#087d7f;font-size:10px;font-weight:900;letter-spacing:.7px}.registration-copy h1{max-width:570px;font-size:clamp(36px,4.2vw,56px);letter-spacing:-1.5px}.registration-copy p{max-width:560px;font-size:17px}.feature-list{grid-template-columns:1fr 1fr;gap:14px;margin-top:30px}.feature-list>div{display:flex;align-items:flex-start;gap:10px;padding:13px;border:1px solid rgba(11,159,159,.12);border-radius:14px;background:rgba(255,255,255,.72);color:var(--text)}.feature-list>div>b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#d9f5f1;color:#078b8e}.feature-list strong,.feature-list small{display:block}.feature-list strong{font-size:13px;color:#0a6f72}.feature-list small{margin-top:3px;color:#71898c;font-size:11px;line-height:1.35}.registration-seal{display:flex;align-items:center;gap:10px;margin-top:26px;color:#6f898c}.registration-seal>span{display:grid;place-items:center;width:34px;height:34px;border:2px solid #15a89e;border-radius:50%;color:#0a999b;font-size:25px}.registration-seal strong,.registration-seal small{display:block}.registration-seal strong{font-size:12px;color:#0b7679}.registration-seal small{font-size:11px;margin-top:3px}.registration-box{background:rgba(255,255,255,.92);box-shadow:0 14px 38px rgba(4,79,82,.1);border-color:#d3ecea}.registration-box h2{color:#075b5d}.registration-box .btn.primary{box-shadow:0 8px 18px rgba(11,159,159,.2)}
+@media(max-width:800px){.clinic-public-hero{padding:22px 18px}.clinic-brandbar{align-items:flex-start;flex-direction:column}.clinic-hero-grid,.public-booking-grid{grid-template-columns:1fr}.clinic-logo-card{min-height:0;padding:8px 0}.booking-intro{padding:8px 4px}.registration-layout{padding:20px 12px}.registration-copy{padding:10px 4px}.registration-badge{align-items:flex-start;flex-direction:column}.registration-badge .registration-hero-logo{width:180px}.feature-list{grid-template-columns:1fr}}
+
+.receipt-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.receipt-actions .btn{font-size:12px;padding:10px 13px}@media(max-width:800px){.receipt-actions{flex-direction:column}.receipt-actions .btn{width:100%}}
+
+/* Ajustes de navegação e portais */
+#adminTopEntry.hidden { display:none !important; }
+.portal-choice-grid { justify-content:center; align-items:stretch; max-width:900px; margin:24px auto 0; }
+.portal-choice-grid .portal-choice { min-width:280px; }
+#notificationCount:empty { display:none; }
+
+/* Acesso administrativo: a visibilidade é controlada pelo JavaScript. */
+
+/* Oculta a área de aviso público quando não houver conteúdo, evitando a linha vazia sob os dados da clínica. */
+.public-clinic-notice:empty{display:none!important}
+
+.schedule-config{margin:24px 0;padding:20px;background:#f4fbfb;border:1px solid #d7eeee;border-radius:16px}.schedule-config h3{margin-bottom:5px}.schedule-row{display:grid;grid-template-columns:1.05fr repeat(5,minmax(110px,1fr));gap:10px;align-items:end;padding:12px 0;border-top:1px solid #dcebed}.schedule-row label{margin:0;font-size:11px}.schedule-row input{margin-top:5px;padding:9px 10px}.schedule-row .schedule-day{display:flex;align-items:center;gap:7px;font-size:13px}.schedule-row .schedule-day input{width:auto;margin:0}.security-settings{margin:20px 0}.security-settings p{margin:8px 0 14px}.auth-recovery{display:flex;gap:8px;margin-top:14px}.auth-recovery .btn{flex:1;padding:10px 8px;font-size:12px}.field-help{display:block;color:#6f898c;font-size:12px;line-height:1.45;margin-top:6px}.clinic-confirmation .appointment-actions{flex-wrap:wrap}@media(max-width:900px){.schedule-row{grid-template-columns:1fr 1fr}.schedule-row .schedule-day{grid-column:1/-1}.auth-recovery{flex-direction:column}}
+
+
+/* Agenda semanal compacta: seletor de dias e painel único de edição. */
+.schedule-editor{margin:14px 0 18px}
+.schedule-day-tabs{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin:15px 0 12px}
+.schedule-day-tab{display:flex;justify-content:center;align-items:center;gap:7px;min-height:39px;padding:7px 9px;border:1px solid #dce8e8;border-radius:11px;background:#fff;color:#526a6c;font-size:12px;font-weight:750;cursor:pointer;transition:background .16s ease,border-color .16s ease,color .16s ease}
+.schedule-day-tab:hover{border-color:#8fcaca;background:#f2fbfa}
+.schedule-day-tab.is-selected{border-color:#0f9291;background:#087f80;color:#fff;box-shadow:0 4px 12px rgba(8,127,128,.16)}
+.schedule-tab-dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#c8d2d3}
+.schedule-day-tab.is-open .schedule-tab-dot{background:#18a386}
+.schedule-day-tab.is-selected.is-open .schedule-tab-dot{background:#b7f0da}
+.schedule-day-tab.is-selected:not(.is-open) .schedule-tab-dot{background:#efd28a}
+.schedule-panel{padding:17px 18px;border:1px solid #dce9e9;border-radius:15px;background:#fff;box-shadow:0 5px 18px rgba(18,72,75,.045)}
+.schedule-panel[hidden]{display:none!important}
+.schedule-panel.is-closed{background:#f8fafa;box-shadow:none}
+.schedule-panel-head{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-bottom:13px;border-bottom:1px solid #e7eeee}
+.schedule-panel-head h4{margin:0;color:#16494b;font-size:15px;font-weight:750}
+.schedule-status{display:inline-flex;margin-top:5px;padding:3px 8px;border-radius:999px;background:#e6f7f3;color:#0a8176;font-size:10px;font-weight:700}
+.schedule-panel.is-closed .schedule-status{background:#edf0f0;color:#718184}
+.schedule-toggle{display:flex;align-items:center;gap:8px;color:#466466;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer}
+.schedule-toggle input{appearance:none;-webkit-appearance:none;position:relative;width:40px;height:23px;min-width:40px;margin:0;border:0;border-radius:999px;background:#cbd5d6;cursor:pointer;transition:background .18s ease}
+.schedule-toggle input:before{content:"";position:absolute;top:3px;left:3px;width:17px;height:17px;border-radius:50%;background:white;box-shadow:0 1px 3px rgba(0,0,0,.18);transition:transform .18s ease}
+.schedule-toggle input:checked{background:#0fa7a7}
+.schedule-toggle input:checked:before{transform:translateX(17px)}
+.schedule-toggle input:focus-visible,.schedule-day-tab:focus-visible{outline:3px solid rgba(15,167,167,.25);outline-offset:2px}
+.schedule-control-grid{display:grid;grid-template-columns:1.2fr .8fr 1.2fr;gap:11px;margin-top:14px}
+.schedule-group{display:block;min-width:0;margin:0;padding:11px 12px;border:1px solid #e5eeee;border-radius:12px;background:#f8fbfb;color:#526c6e;font-size:11px;font-weight:700}
+.schedule-group>strong{display:block;margin:0 0 8px;color:#34585a;font-size:11px}
+.schedule-group>strong span{color:#829294;font-weight:500}
+.schedule-pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.schedule-value-field{display:flex;flex-direction:column;gap:4px;min-width:0;margin:0;color:#6b8082;font-size:10px;font-weight:600}
+.schedule-group input{box-sizing:border-box;width:100%;min-width:0;height:38px;margin:0;padding:7px 8px;border:1px solid #d8e4e5;border-radius:9px;background:#fff;color:#163f42;font-size:13px}
+.schedule-group input:focus{border-color:#0fa7a7;outline:3px solid rgba(15,167,167,.12)}
+.schedule-group input:disabled{background:#eff3f3;color:#899799;cursor:not-allowed}
+.schedule-group-duration{display:flex;flex-direction:column;justify-content:center;gap:6px}
+.schedule-group-duration input{max-width:140px}
+.schedule-group-duration small{color:#829294;font-size:10px;font-weight:500}
+@media(max-width:760px){.schedule-day-tabs{grid-template-columns:repeat(4,minmax(0,1fr))}.schedule-control-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.schedule-group-duration{grid-column:1/-1}.schedule-group-duration input{max-width:100%}}
+@media(max-width:520px){.schedule-config{padding:14px}.schedule-panel{padding:14px}.schedule-panel-head{align-items:flex-start;flex-direction:column}.schedule-day-tabs{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.schedule-control-grid{grid-template-columns:1fr}.schedule-group-duration{grid-column:auto}}
+
+/* Dashboard municipal de indicadores e controles de sessão acessíveis */
+.secretaria-dashboard-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.secretaria-chart{display:grid;gap:12px;margin-top:14px}
+.secretaria-chart-row{display:grid;grid-template-columns:minmax(90px,1.2fr) 3fr 32px;align-items:center;gap:10px;font-size:13px}
+.secretaria-chart-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.secretaria-bar-track{height:10px;border-radius:99px;background:#e4eeee;overflow:hidden;margin:7px 0}
+.secretaria-bar-track i{display:block;height:100%;min-width:2px;border-radius:inherit;background:linear-gradient(90deg,#0b9f9f,#19b8aa)}
+.secretaria-health-grid{display:grid;gap:12px;margin-top:12px}
+.secretaria-health-card{padding:12px;border:1px solid #dcebed;border-radius:12px;background:#fff}
+.secretaria-health-card strong,.secretaria-health-card small{display:block}
+.secretaria-health-card small{color:#6f898c}
+.secretaria-health-values{display:flex;align-items:baseline;gap:8px;margin-top:5px}
+.secretaria-health-values b{font-size:22px;color:#078588}
+.clinic-session-actions{display:flex;align-items:center;gap:10px;padding-right:38px;position:relative}
+.close{z-index:2;width:42px;height:42px;display:grid;place-items:center;line-height:1;touch-action:manipulation}
+@media(max-width:800px){.secretaria-dashboard-grid{grid-template-columns:1fr}.clinic-session-actions{gap:5px;padding-right:35px}.clinic-session-actions .btn{padding:10px 12px}}
+
+
+/* Portais de acesso separados */
+#adminTopEntry{white-space:nowrap;box-shadow:0 6px 15px rgba(4,79,82,.09)}
+body[data-portal="ubs"] #adminTopEntry{background:#fff;border:1px solid #c9e5e4}
+.clinic-login-modal{align-items:stretch;justify-content:stretch;padding:clamp(12px,3vw,38px);overflow-y:auto;background:radial-gradient(circle at 10% 10%,rgba(31,179,166,.18),transparent 35%),radial-gradient(circle at 95% 85%,rgba(4,79,82,.16),transparent 34%),linear-gradient(135deg,#eaf8f6,#f8fbfb 58%,#e2f2f1)}
+.clinic-auth-card{display:grid;grid-template-columns:.92fr 1.08fr;max-width:1060px;min-height:min(700px,calc(100vh - 76px));max-height:none;margin:auto;padding:0;overflow:hidden;border:1px solid rgba(255,255,255,.75);border-radius:28px;box-shadow:0 30px 90px rgba(5,63,67,.2)}
+.clinic-auth-story{position:relative;display:flex;flex-direction:column;justify-content:space-between;min-height:620px;padding:38px;background:radial-gradient(circle at 86% 12%,rgba(255,255,255,.2),transparent 25%),linear-gradient(155deg,#096e70 0%,#07575c 58%,#043f45 100%);color:white;overflow:hidden}
+.clinic-auth-story:after{content:"+";position:absolute;right:-35px;bottom:-155px;font-size:330px;line-height:1;font-weight:900;color:rgba(255,255,255,.07);pointer-events:none}
+.clinic-auth-brand{position:relative;z-index:1;display:flex;align-items:center;gap:17px}.clinic-auth-brand img{width:168px;filter:brightness(0) invert(1)}.clinic-auth-brand span{padding:8px 11px;border:1px solid rgba(255,255,255,.3);border-radius:99px;font-size:9px;font-weight:900;letter-spacing:1px;white-space:nowrap}
+.clinic-auth-story-copy{position:relative;z-index:1;margin:auto 0;padding:48px 0}.clinic-auth-kicker{font-size:10px;letter-spacing:1.8px;font-weight:900;color:#a8efe3}.clinic-auth-story h2{max-width:430px;margin:13px 0 16px;font-size:clamp(32px,4vw,46px);line-height:1.06;letter-spacing:-1.2px;color:#fff}.clinic-auth-story-copy>p{max-width:405px;color:rgba(255,255,255,.83);font-size:15px;line-height:1.65}
+.clinic-auth-benefits{display:grid;gap:12px;margin-top:30px}.clinic-auth-benefits span{display:flex;align-items:center;gap:10px;color:#f0fffc;font-size:13px;font-weight:700}.clinic-auth-benefits b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:rgba(164,243,222,.17);color:#abf3dc}
+
+.clinic-auth-form-panel{position:relative;align-self:center;width:100%;max-width:530px;margin:0 auto;padding:58px clamp(28px,5vw,65px)}.clinic-auth-form-panel h2{margin:8px 0 5px;font-size:32px;letter-spacing:-.8px;color:#094f54}.clinic-auth-form-panel .subtitle{margin-bottom:24px}clinic-auth-form-panel label{margin-top:17px}.clinic-auth-form-panel input{min-height:49px}.clinic-auth-form-panel .auth-switch{display:grid;grid-template-columns:1fr 1fr;margin:22px 0 19px;padding:5px;border:1px solid #e0eeee;border-radius:13px;background:#f4f9f9}.clinic-auth-form-panel .auth-switch button{padding:11px;border-radius:9px}.clinic-auth-form-panel .auth-switch button.active{background:#fff;color:#087b7e;box-shadow:0 4px 12px rgba(4,79,82,.1)}.clinic-auth-submit{min-height:50px;margin-top:24px;box-shadow:0 9px 20px rgba(11,159,159,.2)}.clinic-auth-submit span{margin-left:8px}
+.admin-modal{padding-top:38px}.clinic-session-actions{display:flex;align-items:center;gap:10px}.employee-readonly-note{margin:0 0 16px}
+@media(max-width:780px){.clinic-auth-modal{padding:10px}.clinic-auth-card{grid-template-columns:1fr;min-height:auto;border-radius:20px}.clinic-auth-story{min-height:300px;padding:25px}.clinic-auth-brand img{width:140px}.clinic-auth-story-copy{padding:30px 0}.clinic-auth-story h2{font-size:31px}.clinic-auth-story-copy>p{font-size:13px}.clinic-auth-benefits{grid-template-columns:1fr 1fr;gap:8px;margin-top:17px}.clinic-auth-benefits span{font-size:11px}.clinic-auth-form-panel{padding:38px 24px 30px}.clinic-auth-form-panel h2{font-size:28px}#adminTopEntry{padding:10px 11px;font-size:11px}}
+
+/* A autenticação profissional é isolada da interface SUS/UBS. */
+body.clinic-login-route #appShell{display:none!important}

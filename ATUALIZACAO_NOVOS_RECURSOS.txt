@@ -1,0 +1,6 @@
+NOVA ATUALIZAÇÃO
+
+1. Importe novamente o database.sql em uma instalação nova para criar as novas tabelas/colunas e os gatilhos de segurança.
+2. Se já houver dados importantes no banco atual, faça backup antes de substituir o banco.
+3. Recursos incluídos: cadastro de paciente novo na clínica, código PAC, histórico agrupado por paciente, financeiro com filtros, pagamentos com cartão crédito/débito e parcelas, recibo com valor e dados da clínica, e lançamentos financeiros imutáveis.
+4. Chamados de suporte agora usam protocolo + chave de acesso secreta; somente quem possui a chave consegue consultar a resposta.

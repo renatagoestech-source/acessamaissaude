@@ -1,0 +1,38 @@
+ACESSA+ SAÚDE — PACOTE XAMPP PARA REDE LOCAL
+Código incluído: atualização b1fe7e9
+
+INSTALAÇÃO NOVA
+1. Extraia a pasta `conecta_saude` para `C:\xampp\htdocs\`.
+2. Abra o XAMPP Control Panel e inicie Apache e MySQL.
+3. No computador servidor, abra `http://localhost/conecta_saude/install.php`.
+4. Após a instalação, abra `http://localhost/conecta_saude/`.
+5. Se houver erro de conexão, abra `http://localhost/conecta_saude/diagnostico_xampp.php`.
+
+ATENÇÃO — INSTALADOR APAGA O BANCO
+`install.php` recria e apaga por completo o banco `conecta_saude`. Execute-o somente numa instalação nova ou depois de fazer backup e confirmar que pode perder o conteúdo atual. Não o execute para atualizar uma instalação que já tenha dados. Depois da primeira execução, `install.lock` bloqueia novas instalações.
+
+O XAMPP padrão é configurado como MySQL em 127.0.0.1:3306, usuário `root`, sem senha. Se sua instalação usa outra porta, usuário ou senha, configure os valores de banco em `install.php` e `config.php` antes de instalar. O PHP precisa ter `pdo_mysql` habilitado.
+
+ACESSOS DE DEMONSTRAÇÃO INICIAIS
+- Desenvolvedor: usuário `desenvolvedor`, senha `2026`.
+- UBS: usuários `adminA`, `adminC`, `adminD`, `adminE` e `adminF`; senha inicial `1234`.
+
+Troque as senhas de demonstração antes de permitir acesso a outras pessoas na rede. As senhas das UBS podem ser atualizadas pelo painel administrativo. Para trocar a senha do Desenvolvedor, gere um hash com o PHP do XAMPP:
+
+`C:\xampp\php\php.exe -r "echo password_hash('SUA_NOVA_SENHA_FORTE', PASSWORD_DEFAULT), PHP_EOL;"`
+
+Copie o hash gerado e, no phpMyAdmin, selecione o banco `conecta_saude` e execute, substituindo `HASH_GERADO` pelo hash copiado:
+
+`UPDATE administradores SET senha_hash = 'HASH_GERADO' WHERE usuario = 'desenvolvedor';`
+
+Com a conta Desenvolvedor, a primeira conta global da Secretaria pode ser criada no painel, na aba “Administrador da Secretaria”. Use uma senha forte com pelo menos 12 caracteres.
+
+ACESSO DE OUTROS COMPUTADORES DA REDE LOCAL
+1. No computador que executa o XAMPP, abra o Prompt de Comando e rode `ipconfig`.
+2. Anote o IPv4 do adaptador conectado à rede local (por exemplo, `192.168.1.25`).
+3. No Firewall do Windows, permita Apache/httpd ou a porta HTTP do XAMPP **somente em redes privadas**. Não abra o MySQL (porta 3306) para outros computadores.
+4. Em cada computador cliente, abra `http://IPV4_DO_SERVIDOR/conecta_saude/` (ex.: `http://192.168.1.25/conecta_saude/`). Se Apache estiver numa porta diferente de 80, inclua `:PORTA` na URL.
+5. Não configure encaminhamento de porta no roteador nem exponha o servidor à Internet.
+
+SEGURANÇA
+Este pacote serve para instalação local e testes em rede controlada. O endereço HTTP da rede local não criptografa a conexão. Não use dados reais/sensíveis de saúde sem configurar HTTPS, controle de acesso, backups e as medidas de privacidade e segurança necessárias. Mantenha as credenciais iniciais alteradas e limite o acesso ao perfil privado da rede.

@@ -1,0 +1,3 @@
+<?php
+// Adaptador Vercel para preservar as chamadas existentes para /api.php?action=...
+require_once __DIR__ . '/../api.php';

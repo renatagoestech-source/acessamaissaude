@@ -1,0 +1,72 @@
+CORREÇÃO DA VERSÃO LOCAL
+=========================
+
+A tela vazia ocorre quando a pasta antiga continua no XAMPP ou quando o banco não foi recriado com o database.sql atualizado.
+
+1. Feche o navegador.
+2. Pare o Apache e o MySQL no XAMPP.
+3. Renomeie a pasta antiga `accessa+saude` para `accessa+saude_backup`.
+4. Extraia este pacote para `C:\xampp\htdocs\accessa+saude`.
+5. Inicie Apache e MySQL novamente.
+6. Abra exatamente:
+   http://localhost/accessa+saude/install.php
+7. Aguarde a mensagem de instalação concluída. O instalador recria o banco `conecta_saude` e cadastra as UBS iniciais.
+8. Depois abra:
+   http://localhost/accessa+saude/
+9. Faça Ctrl+F5 para limpar o cache do navegador.
+
+IMPORTANTE
+- Não copie apenas index.php ou style.css. Substitua a pasta inteira para manter api.php, script.js, database.sql e img/logo.png alinhados.
+- O instalador apaga e recria o banco. Não execute em uma instalação que já contenha dados que deseja preservar sem fazer backup.
+- A versão atual não mostra UBSs fictícias quando a API estiver indisponível: ela exibe a tela de instalação/diagnóstico. Cadastro, login, agendamento e exames dependem do Apache + MySQL instalados corretamente.
+
+LOGINS INICIAIS
+Desenvolvedor: desenvolvedor / 2026
+UBS A: adminA / 1234
+UBS C: adminC / 1234
+UBS D: adminD / 1234
+UBS E: adminE / 1234
+UBS F: adminF / 1234
+
+
+SOLUÇÃO PARA ERRO DE CONEXÃO COM O XAMPP
+=========================================
+
+Se o MySQL do XAMPP estiver usando a porta 3307, altere `DB_PORT` em `config.php` e `port` em `install.php` para `3307`. A porta padrão continua sendo `3306`.
+
+Se o usuário root tiver senha no seu XAMPP, altere `DB_PASS` em `config.php` e `pass` em `install.php`.
+
+Verifique também:
+- Apache e MySQL precisam estar com o status verde no painel do XAMPP.
+- A extensão `pdo_mysql` precisa estar habilitada no PHP do XAMPP.
+- O endereço deve ser a pasta correta dentro de `htdocs`, sem manter arquivos antigos misturados.
+- Acesse primeiro `/install.php`; somente depois abra a página principal.
+
+A base atual contém as UBS A, C, D, E e F. Se elas não aparecerem, o banco não foi recriado corretamente: execute novamente `/install.php` após fazer backup dos dados importantes.
+
+
+NOVIDADES DESTA CORREÇÃO
+=========================
+
+- A página inicial de cadastro agora abre sem o menu lateral.
+- O menu lateral aparece somente depois que o paciente entra na área dele.
+- O botão de perfil permite sair e voltar ao cadastro inicial.
+- O suporte permanece no canto inferior direito.
+- Foi adicionada a página `diagnostico_xampp.php`.
+
+Se o instalador não funcionar, abra:
+http://localhost/acessa+saude/diagnostico_xampp.php
+
+Se o MySQL usar a porta 3307, abra:
+http://localhost/acessa+saude/diagnostico_xampp.php?porta=3307
+
+A página mostrará se o PHP, PDO, PDO MySQL, servidor MySQL e banco `conecta_saude` estão funcionando. O instalador e o diagnóstico também respeitam `ACESSA_DB_HOST`, `ACESSA_DB_PORT`, `ACESSA_DB_USER`, `ACESSA_DB_PASS` e `ACESSA_DB_NAME`, caso você use uma configuração diferente da padrão do XAMPP.
+
+2026-09-24 - Correções solicitadas:
+- Corrigido retorno do agendamento público de clínica para não transformar consulta gravada em erro por falha de notificação.
+- Acesso administrativo visível somente no portal inicial.
+- Entrada da clínica com botão próprio, alinhado à entrada UBS.
+- Removida barra global de pesquisa e campos de pesquisa textual de relacionamento/financeiro.
+- Notificações do paciente passaram a solicitar permissão do navegador e exibir notificações pendentes.
+- Suporte roteado para UBS/clínica conforme vínculo do paciente; unidade pode encaminhar ao desenvolvedor.
+- Respostas de suporte continuam protegidas por protocolo + chave de acesso do solicitante.

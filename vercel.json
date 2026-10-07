@@ -12,11 +12,19 @@
   },
   "routes": [
     {
+      "src": "/ubs/?$",
+      "dest": "/api/index.php?portal=ubs"
+    },
+    {
+      "src": "/clinica/?$",
+      "dest": "/api/index.php?portal=clinica"
+    },
+    {
       "src": "/api.php",
       "dest": "/api/api.php"
     },
     {
-      "src": "/(.*\\.(?:css|js|png|jpg|jpeg|webp|svg|ico|txt|sql))",
+      "src": "/(.*\\.(?:css|js|png|jpg|jpeg|webp|svg|ico))",
       "dest": "/$1"
     },
     {
