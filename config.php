@@ -10,27 +10,47 @@ const DB_PASS = '';
 function db(): PDO
 {
     static $pdo = null;
-
     if ($pdo instanceof PDO) {
         return $pdo;
     }
-
-    $port = getenv('ACESSA_DB_PORT') ?: DB_PORT;
-    $host = getenv('ACESSA_DB_HOST') ?: DB_HOST;
-    $user = getenv('ACESSA_DB_USER') ?: DB_USER;
+    $manualHost = getenv('ACESSA_DB_HOST') ?: '';
+    $tidbHost = getenv('TIDB_HOST') ?: '';
+    $useTiDB = $manualHost === '' && $tidbHost !== '';
+    $host = $manualHost ?: ($tidbHost ?: DB_HOST);
+    $port = getenv('ACESSA_DB_PORT') ?: ($useTiDB ? (getenv('TIDB_PORT') ?: '4000') : DB_PORT);
+    $user = getenv('ACESSA_DB_USER') ?: ($useTiDB ? (getenv('TIDB_USER') ?: DB_USER) : DB_USER);
     $pass = getenv('ACESSA_DB_PASS');
-    if ($pass === false) $pass = DB_PASS;
-    $dbName = getenv('ACESSA_DB_NAME') ?: DB_NAME;
+    if ($pass === false || $pass === '') $pass = $useTiDB ? (getenv('TIDB_PASSWORD') ?: '') : DB_PASS;
+    $dbName = getenv('ACESSA_DB_NAME') ?: ($useTiDB ? (getenv('TIDB_DATABASE') ?: DB_NAME) : DB_NAME);
     $dsn = 'mysql:host=' . $host . ';port=' . $port . ';dbname=' . $dbName . ';charset=utf8mb4';
-
-    $pdo = new PDO($dsn, $user, $pass, [
+    $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
-    ]);
-
+    ];
+    $sslCaPath = getenv('ACESSA_DB_SSL_CA') ?: '';
+    if ($useTiDB || $sslCaPath !== '') {
+        if (!defined('PDO::MYSQL_ATTR_SSL_CA')) {
+            throw new RuntimeException('O driver PDO MySQL não disponibiliza configuração TLS para o banco.');
+        }
+        if ($sslCaPath === '') {
+            foreach (['/etc/ssl/certs/ca-certificates.crt', '/etc/ssl/cert.pem', '/etc/pki/tls/certs/ca-bundle.crt'] as $candidate) {
+                if (is_file($candidate)) {
+                    $sslCaPath = $candidate;
+                    break;
+                }
+            }
+        }
+        if ($sslCaPath === '' || !is_file($sslCaPath)) {
+            throw new RuntimeException('O TiDB Cloud exige TLS. Configure ACESSA_DB_SSL_CA com o caminho do pacote de certificados CA.');
+        }
+        $options[constant('PDO::MYSQL_ATTR_SSL_CA')] = $sslCaPath;
+        if (defined('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')) {
+            $options[constant('PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT')] = true;
+        }
+    }
+    $pdo = new PDO($dsn, $user, $pass, $options);
     ensure_schema_compatibility($pdo, $dbName);
-
     return $pdo;
 }
 

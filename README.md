@@ -8,6 +8,16 @@ O Vercel não fornece um MySQL local persistente. Antes de publicar, crie um ban
 
 O armazenamento local do Vercel também não é persistente. Uploads de logo e anexos devem ser migrados para um serviço de arquivos persistente antes de uso em produção. Para demonstração, a interface e o banco funcionam com as configurações adequadas.
 
+## TiDB Cloud Starter com Vercel
+
+O TiDB Cloud Starter é uma opção MySQL-compatible com cota gratuita. A integração oficial Vercel/PingCAP adiciona `TIDB_HOST`, `TIDB_PORT`, `TIDB_USER`, `TIDB_PASSWORD` e `TIDB_DATABASE`; a conexão deste projeto aceita essas variáveis quando `ACESSA_DB_HOST` não estiver definido. O TiDB Starter usa normalmente a porta `4000`, exige TLS e usa o pacote de certificados CA do runtime. Para uma integração PHP, selecione o modo **General**, não Prisma.
+
+Para evitar cobranças, mantenha o limite de gastos do Starter em `US$ 0`. Ao atingir a cota gratuita, o banco pode bloquear novas conexões até a renovação mensal. Confira os limites atuais em [TiDB Cloud Starter pricing](https://www.pingcap.com/tidb-cloud-starter-pricing-details/).
+
+O banco ainda precisa do esquema inicial. `database.sql` começa com `DROP DATABASE`; execute-o somente em uma instalação nova e vazia, nunca sobre uma base que já contenha dados. As migrações compatíveis restantes são executadas pela aplicação após a primeira conexão.
+
+Como este sistema pode armazenar informações de saúde, use dados fictícios no plano gratuito até avaliar requisitos de privacidade, backups e disponibilidade para o uso pretendido.
+
 ## Subir pelo GitHub
 
 1. Crie um repositório vazio no GitHub.
