@@ -1082,8 +1082,9 @@ async function carregarExamesPaciente(sus) {
 function atualizarDashboard() {
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
     if (!paciente) return;
+    const pacienteUbsId = paciente.ubsId || sessionStorage.getItem(STORAGE_LAST_UBS);
     preencherDadosPaciente(paciente);
-    const unidadeAtual = ubsList.find(u => u.id === paciente.ubsId);
+    const unidadeAtual = ubsList.find(u => String(u.id) === String(pacienteUbsId));
     if ($("ubsAtualDashboard")) $("ubsAtualDashboard").textContent = unidadeAtual?.nome || "Não informada";
     const futuras = appointments.filter(a => a.status === "agendado").sort((a,b) => (a.data+a.horario).localeCompare(b.data+b.horario));
     const realizadas = appointments.filter(a => a.status === "atendido");
@@ -1098,8 +1099,7 @@ function atualizarDashboard() {
     }
     const avisos = $("dashboardAvisos");
     if (avisos) {
-        const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
-        const unidades = paciente?.ubsId ? ubsList.filter(u => u.id === paciente.ubsId) : [];
+        const unidades = pacienteUbsId ? ubsList.filter(u => String(u.id) === String(pacienteUbsId)) : [];
         const itens = unidades.flatMap(u => (u.campanhas || []).slice(0,2).map(c => ({nome:c,ubs:u.nome})));
         avisos.innerHTML = itens.length ? itens.slice(0,4).map(i => `<div class="notice"><b>${escapeHTML(i.nome)}</b><small>${escapeHTML(i.ubs)}</small></div>`).join("") : '<div class="info-box">Nenhum aviso cadastrado.</div>';
     }
@@ -1136,13 +1136,23 @@ function renderExamesPaciente() {
     container.innerHTML = patientExams.map(e => `<article class="exam-card"><div class="exam-head"><div><h3>${escapeHTML(e.nome)}</h3><span class="exam-date">Data: ${formatarDataBR(e.data)} • ${escapeHTML(e.ubsNome)}</span></div><span class="status">Disponível</span></div><div class="exam-result"><strong>Resultado</strong><br>${escapeHTML(e.resultado)}</div>${e.observacoes ? `<div class="subtitle"><strong>Observações:</strong> ${escapeHTML(e.observacoes)}</div>` : ""}${e.anexo ? `<a class="btn secondary exam-attachment" href="api.php?action=download_exam&id=${encodeURIComponent(e.id)}&sus=${encodeURIComponent(JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "{}").sus || "")}" target="_blank" rel="noopener">Abrir anexo: ${escapeHTML(e.anexoNome || "resultado")}</a>` : ""}</article>`).join("");
 }
 
-function mostrarAvisos() {
+async function mostrarAvisos() {
     const container = $("listaAvisos");
+    if (!container) return;
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
-    const unidades = paciente?.ubsId ? ubsList.filter(u => u.id === paciente.ubsId) : [];
-    const itens = unidades.flatMap(u => (u.campanhas || []).map(c => ({nome:c,ubs:u.nome,horario:u.horario})));
-    container.innerHTML = itens.length ? itens.map(i => `<div class="notice-card"><span class="tag">CAMPANHA / AVISO</span><h3>${escapeHTML(i.nome)}</h3><p>${escapeHTML(i.ubs)} • Atendimento: ${escapeHTML(i.horario)}</p></div>`).join("") : '<div class="info-box">Nenhum aviso cadastrado.</div>';
+    const pacienteUbsId = paciente?.ubsId || sessionStorage.getItem(STORAGE_LAST_UBS);
     mostrarApenas("avisosSection");
+    container.innerHTML = '<div class="info-box" role="status">Atualizando campanhas e eventos...</div>';
+    try {
+        const data = await api("get_ubs");
+        const unidades = (data.ubs || []).filter(u => String(u.id) === String(pacienteUbsId));
+        const itens = unidades.flatMap(u => (Array.isArray(u.campanhas) ? u.campanhas : []).map(c => ({nome:c,ubs:u.nome,horario:u.horario})));
+        container.innerHTML = itens.length
+            ? itens.map(i => `<article class="notice-card"><span class="tag">CAMPANHA / EVENTO</span><h3>${escapeHTML(i.nome)}</h3><p>${escapeHTML(i.ubs)}${i.horario ? ` • Atendimento: ${escapeHTML(i.horario)}` : ""}</p></article>`).join("")
+            : '<div class="info-box">Nenhuma campanha ou evento cadastrado para sua UBS no momento.</div>';
+    } catch (error) {
+        container.innerHTML = `<div class="info-box">Não foi possível carregar campanhas e eventos: ${escapeHTML(error.message)}</div>`;
+    }
 }
 
 async function verificarNotificacoes() {

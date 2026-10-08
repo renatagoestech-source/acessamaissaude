@@ -41,7 +41,6 @@ if ($appPortal !== '' && $requestPath !== $portalPath) {
             <button class="nav-item" onclick="iniciarAgendamento()"><span>▣</span> Agendar consulta</button>
             <button class="nav-item" onclick="mostrarAgendamentos()"><span>▤</span> Minhas consultas</button>
             <button class="nav-item" onclick="mostrarExames()"><span>⌁</span> Resultados de exames</button>
-            <button class="nav-item" onclick="mostrarUBSMenu()"><span>♜</span> UBS</button>
             <button class="nav-item" onclick="mostrarAvisos()"><span>⚑</span> Campanhas e avisos</button>
             <button class="nav-item" onclick="mostrarAjuda()"><span>?</span> Ajuda</button>
         </nav>

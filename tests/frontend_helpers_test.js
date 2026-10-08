@@ -36,5 +36,51 @@ for (const match of html.matchAll(/on(?:click|change|input|blur|submit)\s*=\s*"(
   }
 }
 assert.deepEqual([...missing], [], `Handlers HTML sem função JavaScript: ${[...missing].join(', ')}`);
+assert.doesNotMatch(html, /class="nav-item" onclick="mostrarUBSMenu\(\)"/, 'A aba UBS não deve aparecer na navegação lateral do paciente.');
+assert.match(html, /class="nav-item" onclick="iniciarAgendamento\(\)"/, 'O acesso para agendar consulta deve continuar disponível.');
 
 console.log('CPF helpers e handlers HTML: OK');
+
+async function testPatientCampaigns() {
+  const start = js.indexOf('async function mostrarAvisos(');
+  const end = js.indexOf('async function verificarNotificacoes()', start);
+  assert(start >= 0 && end > start, 'A área de campanhas deve atualizar os dados do servidor ao abrir.');
+
+  const container = { innerHTML: '' };
+  const visibleSections = [];
+  let requestedAction = '';
+  const context = {
+    STORAGE_PATIENT: 'patient',
+    STORAGE_LAST_UBS: 'last-ubs',
+    sessionStorage: {
+      getItem(key) {
+        return key === 'patient' ? JSON.stringify({ ubsId: 42 }) : null;
+      }
+    },
+    $: id => id === 'listaAvisos' ? container : null,
+    api: async action => {
+      requestedAction = action;
+      return { ubs: [
+        { id: '42', nome: 'UBS Central', horario: '07:00 às 18:00', campanhas: ['Vacinação <2026>'] },
+        { id: '43', nome: 'Outra UBS', horario: '08:00 às 17:00', campanhas: ['Não deve aparecer'] }
+      ] };
+    },
+    mostrarApenas: section => visibleSections.push(section),
+    escapeHTML: value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;')
+  };
+
+  vm.runInNewContext(js.slice(start, end), context);
+  await context.mostrarAvisos();
+  assert.equal(requestedAction, 'get_ubs');
+  assert.deepEqual(visibleSections, ['avisosSection']);
+  assert.match(container.innerHTML, /CAMPANHA \/ EVENTO/);
+  assert.match(container.innerHTML, /Vacinação &lt;2026&gt;/);
+  assert.match(container.innerHTML, /UBS Central/);
+  assert.doesNotMatch(container.innerHTML, /Não deve aparecer/);
+  console.log('Campanhas e eventos atualizados para a UBS do paciente: OK');
+}
+
+testPatientCampaigns().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});
