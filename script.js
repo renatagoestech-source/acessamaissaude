@@ -2908,7 +2908,7 @@ function atualizarLinkPublicoClinica(slug) {
         if (copyButton) copyButton.disabled = true;
         return;
     }
-    const url = new URL(appPath("/clinica"), location.origin);
+    const url = new URL(appPath("/"), location.origin);
     url.searchParams.set("clinica", slug);
     const href = url.toString();
     if (publicLink) { publicLink.href = href; publicLink.textContent = href; publicLink.dataset.url = href; }

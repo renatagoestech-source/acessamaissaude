@@ -14,7 +14,12 @@ if (preg_match('~^(.*?)/(?:ubs|clinica)$~', $portalPath, $baseMatch)) {
     if ($scriptDir !== '/api' && $scriptDir !== '.') $appBasePath = $scriptDir;
 }
 if ($appPortal !== '' && $requestPath !== $portalPath) {
-    header('Location: ' . $appBasePath . '/' . $appPortal, true, 302);
+    $redirectUrl = $appBasePath . '/' . $appPortal;
+    if ($appPortal === 'clinica') {
+        $redirectQuery = http_build_query($_GET, '', '&', PHP_QUERY_RFC3986);
+        if ($redirectQuery !== '') $redirectUrl .= '?' . $redirectQuery;
+    }
+    header('Location: ' . $redirectUrl, true, 302);
     exit;
 }
 ?>

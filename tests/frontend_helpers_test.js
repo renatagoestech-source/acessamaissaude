@@ -41,6 +41,48 @@ assert.match(html, /class="nav-item" onclick="iniciarAgendamento\(\)"/, 'O acess
 
 console.log('CPF helpers e handlers HTML: OK');
 
+function testClinicPublicLink() {
+  const linkStart = js.indexOf('function atualizarLinkPublicoClinica(slug)');
+  const linkEnd = js.indexOf('\nasync function copiarLinkPublicoClinica()', linkStart);
+  assert(linkStart >= 0 && linkEnd > linkStart, 'O construtor do link público deve continuar disponível.');
+
+  const publicLink = { href: '#', textContent: '', dataset: {} };
+  const previewLink = {
+    href: '#',
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+    removeAttribute(name) { delete this.attributes[name]; }
+  };
+  const copyButton = { disabled: true };
+  const context = {
+    URL,
+    location: { origin: 'https://clinic.example' },
+    appPath: path => path,
+    $: id => ({
+      profPublicLink: publicLink,
+      profPublicLinkOpen: previewLink,
+      copyPublicClinicLinkButton: copyButton
+    })[id] || null
+  };
+  vm.runInNewContext(js.slice(linkStart, linkEnd), context);
+  context.atualizarLinkPublicoClinica('clinica-teste');
+
+  const generated = new URL(publicLink.href);
+  assert.equal(generated.origin, 'https://clinic.example');
+  assert.equal(generated.pathname, '/', 'O link usa a rota raiz pública compartilhada com os e-mails da clínica.');
+  assert.equal(generated.searchParams.get('clinica'), 'clinica-teste');
+  assert.equal(previewLink.href, publicLink.href);
+  assert.equal(copyButton.disabled, false);
+}
+
+testClinicPublicLink();
+assert.match(html, /if \(\$appPortal === 'clinica'\)[\s\S]*http_build_query\(\$_GET/, 'O redirecionamento da rota clínica deve preservar o slug.');
+const css = fs.readFileSync('style.css', 'utf8');
+assert.match(css, /#professionalCalendar \.calendar-cell/);
+assert.match(css, /#profAgenda \.calendar-toolbar/);
+assert.match(css, /@media\(max-width:520px\).*#professionalCalendar/);
+console.log('Link público da clínica e escopo do calendário: OK');
+
 async function testPatientCampaigns() {
   const start = js.indexOf('async function mostrarAvisos(');
   const end = js.indexOf('async function verificarNotificacoes()', start);
