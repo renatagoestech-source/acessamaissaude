@@ -2680,7 +2680,66 @@ async function sairProfissional(){
     fecharLoginProfissional();voltarEntradaPortais();toast('Sessão da clínica encerrada.');
 }
 async function abrirPortalProfissional(tab='dashboard'){document.body.classList.remove('clinic-login-route');if(!professionalSession){abrirLoginProfissional();return;}if($("adminTopEntry")){ $("adminTopEntry").classList.add("hidden"); $("adminTopEntry").style.display="none"; }mostrarApenas('professionalSection');document.querySelectorAll('.professional-tab').forEach(x=>x.classList.add('hidden'));const id='prof'+tab.charAt(0).toUpperCase()+tab.slice(1);if($(id))$(id).classList.remove('hidden');$('professionalNomeTopo').textContent=professionalSession.nome||'profissional';if(tab==='dashboard'||tab==='pacientes'||tab==='agenda'||tab==='financeiro'||tab==='relacionamento')carregarPortalProfissional();if(tab==='relacionamento')setTimeout(carregarRelacionamentoProfissional,50);if(tab==='financeiro')setTimeout(carregarFinanceiroProfissional,50);if(tab==='marca')carregarPerfilProfissional();if(tab==='assinatura')carregarPlanosProfissional();if(tab==='agenda')setTimeout(carregarListaEsperaProfissional,50);if(tab==='waitlist')carregarListaEsperaProfissional();if(tab==='suporte')carregarSuporteClinica();}
-async function carregarPortalProfissional(){try{const [p,a,m]=await Promise.all([api('professional_patients'),api('professional_appointments'),api('professional_me')]);professionalPatients=p.patients||[];$('profCountPatients').textContent=professionalPatients.length;$('profCountAppointments').textContent=(a.appointments||[]).length;professionalSession=m.professional;renderPatientsProfissional();renderAppointmentsProfissional(a.appointments||[]);renderCalendarioProfissional(a.appointments||[]);preencherSelectsProfissional();}catch(e){toast(e.message);}}
+async function carregarPortalProfissional(){
+    const calendarBox=$('professionalCalendar');
+    const patientsBox=$('profPatientsList');
+    const appointmentsBox=$('profAppointmentsList');
+    const patientSelect=$('profAgendaPaciente');
+    professionalPatients=[];
+    window.professionalAppointments=[];
+    if(calendarBox)renderCalendarioProfissional([]);
+    if(patientsBox)patientsBox.innerHTML='<div class="info-box">Carregando pacientes...</div>';
+    if(appointmentsBox)appointmentsBox.innerHTML='<div class="info-box">Carregando consultas...</div>';
+    if(patientSelect){patientSelect.disabled=true;patientSelect.innerHTML='<option value="">Carregando pacientes...</option>';}
+    if($('profCountPatients'))$('profCountPatients').textContent='…';
+    if($('profCountAppointments'))$('profCountAppointments').textContent='…';
+
+    const [patientsResult,appointmentsResult,profileResult]=await Promise.allSettled([
+        api('professional_patients'),
+        api('professional_appointments'),
+        api('professional_me')
+    ]);
+    const errors=[];
+
+    if(patientsResult.status==='fulfilled'){
+        professionalPatients=Array.isArray(patientsResult.value.patients)?patientsResult.value.patients:[];
+        if($('profCountPatients'))$('profCountPatients').textContent=professionalPatients.length;
+        renderPatientsProfissional();
+        preencherSelectsProfissional();
+        if(patientSelect)patientSelect.disabled=professionalPatients.length===0;
+    }else{
+        if($('profCountPatients'))$('profCountPatients').textContent='—';
+        if(patientsBox)patientsBox.innerHTML='<div class="info-box">Não foi possível carregar os pacientes. Clique em Atualizar para tentar novamente.</div>';
+        if(patientSelect){patientSelect.disabled=true;patientSelect.innerHTML='<option value="">Pacientes indisponíveis</option>';}
+        errors.push(patientsResult.reason);
+    }
+
+    if(appointmentsResult.status==='fulfilled'){
+        const appointments=Array.isArray(appointmentsResult.value.appointments)?appointmentsResult.value.appointments:[];
+        if($('profCountAppointments'))$('profCountAppointments').textContent=appointments.length;
+        renderAppointmentsProfissional(appointments);
+        renderCalendarioProfissional(appointments);
+    }else{
+        if($('profCountAppointments'))$('profCountAppointments').textContent='—';
+        renderAppointmentsProfissional([]);
+        renderCalendarioProfissional([]);
+        if(appointmentsBox)appointmentsBox.innerHTML='<div class="info-box">Não foi possível carregar as consultas. A grade do calendário continua visível; clique em Atualizar para tentar novamente.</div>';
+        errors.push(appointmentsResult.reason);
+    }
+
+    if(profileResult.status==='fulfilled'&&profileResult.value.professional){
+        professionalSession=profileResult.value.professional;
+        const name=$('professionalNomeTopo');
+        if(name)name.textContent=professionalSession.nome||'profissional';
+    }else{
+        errors.push(profileResult.status==='rejected'?profileResult.reason:new Error('Não foi possível carregar o perfil profissional.'));
+    }
+
+    if(errors.length){
+        const message=errors.find(error=>error&&error.message)?.message||'Parte dos dados da clínica não pôde ser carregada.';
+        toast(message);
+    }
+}
 function renderPatientsProfissional(){
  const box=$('profPatientsList');
  box.innerHTML=professionalPatients.length?professionalPatients.map(p=>`<article class="admin-appointment"><strong>${escapeHTML(p.codigo||'PAC')} — ${escapeHTML(p.nome)}</strong><p>Contato: ${escapeHTML(p.email||'')} • ${escapeHTML(p.telefone||'')} • CPF: ${escapeHTML(formatarCpf(p.cpf||''))}</p><button class="btn secondary" onclick="abrirHistoricoPaciente(${Number(p.id)})">Histórico de consultas</button></article>`).join(''):'<div class="info-box">Nenhum paciente vinculado. Use o Cartão SUS ou cadastre um paciente novo.</div>';
