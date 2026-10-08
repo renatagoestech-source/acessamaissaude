@@ -13,6 +13,11 @@ function db(): PDO
     if ($pdo instanceof PDO) {
         return $pdo;
     }
+    $databaseUrl = getenv('DATABASE_URL') ?: (getenv('SUPABASE_DB_URL') ?: '');
+    if ($databaseUrl !== '') {
+        $pdo = connect_supabase_postgres($databaseUrl);
+        return $pdo;
+    }
     $manualHost = getenv('ACESSA_DB_HOST') ?: '';
     $tidbHost = getenv('TIDB_HOST') ?: '';
     $useTiDB = $manualHost === '' && $tidbHost !== '';
@@ -51,6 +56,38 @@ function db(): PDO
     }
     $pdo = new PDO($dsn, $user, $pass, $options);
     ensure_schema_compatibility($pdo, $dbName);
+    return $pdo;
+}
+
+function connect_supabase_postgres(string $databaseUrl): PDO
+{
+    $parts = parse_url($databaseUrl);
+    $scheme = is_array($parts) ? strtolower((string)($parts['scheme'] ?? '')) : '';
+    if (!is_array($parts) || !in_array($scheme, ['postgres', 'postgresql'], true)) {
+        throw new RuntimeException('DATABASE_URL precisa ser uma URL PostgreSQL válida.');
+    }
+    $host = (string)($parts['host'] ?? '');
+    $user = rawurldecode((string)($parts['user'] ?? ''));
+    $password = rawurldecode((string)($parts['pass'] ?? ''));
+    $database = rawurldecode(ltrim((string)($parts['path'] ?? ''), '/'));
+    if ($host === '' || $user === '' || $database === '') {
+        throw new RuntimeException('DATABASE_URL está incompleta: host, usuário e banco são obrigatórios.');
+    }
+    require_once __DIR__ . '/postgres_compat.php';
+    $dsn = 'pgsql:host=' . $host
+        . ';port=' . (int)($parts['port'] ?? 5432)
+        . ';dbname=' . $database
+        . ';sslmode=require;connect_timeout=8';
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ];
+    $pdo = new PostgresCompatPDO($dsn, $user, $password, $options);
+    $schema = $pdo->query("SELECT to_regclass('public.ubs') AS ubs, to_regclass('public.pacientes') AS pacientes")->fetch();
+    if (!$schema || !$schema['ubs'] || !$schema['pacientes']) {
+        throw new RuntimeException('O Supabase conectou, mas as tabelas-base do Acessa+ Saúde não foram encontradas no schema public.');
+    }
     return $pdo;
 }
 
