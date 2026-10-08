@@ -244,7 +244,7 @@ if ($appPortal !== '' && $requestPath !== $portalPath) {
 
 <div id="professionalAuthModal" class="modal hidden clinic-login-modal"><div class="modal-content clinic-auth-card">
     <section class="clinic-auth-story">
-        <div class="clinic-auth-brand"><img src="img/logo.png" alt="Acessa+ Saúde"><span>PORTAL DA CLÍNICA</span></div>
+        <div class="clinic-auth-brand"><img src="img/logo-clinic-transparent.png" alt="Acessa+ Saúde"><span>PORTAL DA CLÍNICA</span></div>
         <div class="clinic-auth-story-copy"><span class="clinic-auth-kicker">CUIDADO COM MAIS CONEXÃO</span><h2>Seu consultório, organizado em um só lugar.</h2><p>Acesse sua agenda, acompanhe seus pacientes e cuide da presença digital da sua clínica com praticidade.</p>
             <div class="clinic-auth-benefits"><span><b>✓</b> Agenda e solicitações</span><span><b>✓</b> Pacientes e relacionamento</span><span><b>✓</b> Personalização do seu perfil</span></div>
         </div>

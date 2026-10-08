@@ -2,21 +2,19 @@
 
 Este repositório contém a versão PHP do Acessa+ Saúde preparada para o runtime PHP comunitário recomendado pelo Vercel. O frontend continua em `index.php` e as chamadas existentes para `api.php?action=...` são encaminhadas por `api/api.php`.
 
-## Importante antes do deploy
+## Supabase PostgreSQL (produção)
 
-O Vercel não fornece um MySQL local persistente. Antes de publicar, crie um banco MySQL externo acessível pela internet e configure as variáveis `ACESSA_DB_*` no painel do Vercel. O arquivo `database.sql` contém o esquema inicial.
+No Vercel, configure `DATABASE_URL` como variável **Sensitive** somente no servidor. Para funções serverless, copie no Supabase **Connect → Transaction pooler** a connection string do **Shared Pooler** (porta `6543`, IPv4), substitua o placeholder da senha e codifique caracteres reservados da senha com percent-encoding. A conexão direta `db.<project-ref>.supabase.co:5432` é IPv6 por padrão e não funciona em redes Vercel sem saída IPv6. O modo transaction do Supabase não suporta prepared statements nativos; a aplicação ativa emulação PDO automaticamente quando detecta a porta `6543`. O PHP conecta ao PostgreSQL somente no servidor. **Não coloque essa URL, a senha do banco ou uma service-role key no JavaScript/browser.** As policies RLS bloqueiam os papéis públicos `anon` e `authenticated`; o backend usa a credencial privada do servidor.
 
-O armazenamento local do Vercel também não é persistente. Uploads de logo e anexos devem ser migrados para um serviço de arquivos persistente antes de uso em produção. Para demonstração, a interface e o banco funcionam com as configurações adequadas.
+Quando `DATABASE_URL` estiver definido, a aplicação não executa migrações automáticas nem altera o schema na conexão. As tabelas já precisam existir no Supabase. **Não execute `database.sql` em produção:** esse arquivo começa com `DROP DATABASE` e serve apenas como referência de instalação MySQL limpa.
 
-## TiDB Cloud Starter com Vercel
+O Vercel não mantém arquivos gravados localmente entre execuções. Uploads de logo e anexos precisam de armazenamento externo persistente antes de uso amplo em produção.
 
-O TiDB Cloud Starter é uma opção MySQL-compatible com cota gratuita. A integração oficial Vercel/PingCAP adiciona `TIDB_HOST`, `TIDB_PORT`, `TIDB_USER`, `TIDB_PASSWORD` e `TIDB_DATABASE`; a conexão deste projeto aceita essas variáveis quando `ACESSA_DB_HOST` não estiver definido. O TiDB Starter usa normalmente a porta `4000`, exige TLS e usa o pacote de certificados CA do runtime. Para uma integração PHP, selecione o modo **General**, não Prisma.
+## Compatibilidade MySQL/TiDB legada
 
-Para evitar cobranças, mantenha o limite de gastos do Starter em `US$ 0`. Ao atingir a cota gratuita, o banco pode bloquear novas conexões até a renovação mensal. Confira os limites atuais em [TiDB Cloud Starter pricing](https://www.pingcap.com/tidb-cloud-starter-pricing-details/).
+Sem `DATABASE_URL`, o modo legado aceita `ACESSA_DB_*` ou as variáveis `TIDB_HOST`, `TIDB_PORT`, `TIDB_USER`, `TIDB_PASSWORD` e `TIDB_DATABASE`. O TiDB exige TLS. Essa opção existe para desenvolvimento/instalações antigas; produção deste projeto usa Supabase PostgreSQL.
 
-O banco ainda precisa do esquema inicial. `database.sql` começa com `DROP DATABASE`; execute-o somente em uma instalação nova e vazia, nunca sobre uma base que já contenha dados. As migrações compatíveis restantes são executadas pela aplicação após a primeira conexão.
-
-Como este sistema pode armazenar informações de saúde, use dados fictícios no plano gratuito até avaliar requisitos de privacidade, backups e disponibilidade para o uso pretendido.
+Como o sistema pode armazenar informações de saúde, use contas e dados fictícios em testes e avalie privacidade, backups e disponibilidade antes do uso pretendido.
 
 ## Subir pelo GitHub
 
@@ -27,7 +25,7 @@ Como este sistema pode armazenar informações de saúde, use dados fictícios n
 
 > **Importante:** no Vercel, defina a raiz do projeto como a pasta que contém diretamente `vercel.json`, `index.php` e a pasta `api`. Não selecione uma pasta pai que contenha `acessa-saude-vercel` como subpasta.
 
-5. Em **Project Settings → Environment Variables**, cadastre as variáveis do `.env.example` com os valores reais do seu MySQL.
+5. Em **Project Settings → Environment Variables**, cadastre a URL do **Shared Transaction Pooler** como segredo `DATABASE_URL` no ambiente Production; não use dados reais em Preview.
 6. Faça o deploy.
 
 ## Subir pelo terminal

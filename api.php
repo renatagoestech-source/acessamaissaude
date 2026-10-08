@@ -257,7 +257,7 @@ try {
 
     json_response([
         'success' => false,
-        'message' => 'Erro de banco de dados. Verifique se o MySQL do XAMPP está iniciado e se o banco foi instalado.'
+        'message' => 'Não foi possível conectar ao banco de dados. Verifique a configuração de conexão do servidor.'
     ], 500);
 
 } catch (Throwable $e) {
@@ -372,7 +372,7 @@ function professional_register(PDO $pdo, array $data): never {
         $_SESSION['professional']=['id'=>(int)$p['id'],'email'=>$p['email'],'nome'=>$p['nome'],'auth_version'=>(int)$p['auth_version']];
         audit_professional_event($pdo,$id,'cadastro_profissional','profissionais',(string)$id,['email_hash'=>hash('sha256',$email)]);
         json_response(['success'=>true,'message'=>'Conta profissional criada. Você já pode começar.','csrf_token'=>$_SESSION['_csrf_token'],'professional'=>['id'=>(int)$p['id'],'nome'=>$p['nome'],'email'=>$p['email']]]);
-    } catch(PDOException $e){ if((int)($e->errorInfo[1]??0)===1062) json_response(['success'=>false,'message'=>'Este e-mail já está cadastrado. Entre ou use “Esqueci minha senha”.'],409); json_response(['success'=>false,'message'=>'Não foi possível criar a conta profissional. Verifique os dados e tente novamente.'],500); }
+    } catch(PDOException $e){ if(($e->errorInfo[0]??$e->getCode())==='23505'||(int)($e->errorInfo[1]??0)===1062) json_response(['success'=>false,'message'=>'Este e-mail já está cadastrado. Entre ou use “Esqueci minha senha”.'],409); json_response(['success'=>false,'message'=>'Não foi possível criar a conta profissional. Verifique os dados e tente novamente.'],500); }
 }
 function slug_publico(PDO $pdo,string $nome): string { $s=iconv('UTF-8','ASCII//TRANSLIT',$nome);$s=preg_replace('/[^a-z0-9]+/','-',strtolower((string)$s));$s=trim($s,'-')?:'profissional';$base=$s;$i=2;$q=$pdo->prepare('SELECT 1 FROM profissionais WHERE slug=? LIMIT 1');while(true){$q->execute([$s]);if(!$q->fetchColumn())return $s;$s=$base.'-'.$i++;} }
 function public_clinic(PDO $pdo,string $slug): never {
@@ -656,7 +656,7 @@ function professional_update_appointment(PDO $pdo,array $data): never {
 function subscription_plans(PDO $pdo): never { $q=$pdo->query('SELECT id,codigo,nome,valor_mensal AS valorMensal,limite_pacientes AS limitePacientes FROM planos_assinatura WHERE ativo=1 ORDER BY valor_mensal');json_response(['success'=>true,'plans'=>$q->fetchAll()]);}
 function professional_subscription(PDO $pdo): never { $s=require_professional();$q=$pdo->prepare('SELECT a.id,a.status,a.inicio,a.fim,p.nome AS plano,p.valor_mensal AS valorMensal,p.limite_pacientes AS limitePacientes FROM assinaturas_profissionais a INNER JOIN planos_assinatura p ON p.id=a.plano_id WHERE a.profissional_id=? ORDER BY a.id DESC LIMIT 1');$q->execute([$s['id']]);json_response(['success'=>true,'subscription'=>$q->fetch()?:null]);}
 function admin_professional_payments(PDO $pdo): never { $s=require_admin();if($s['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode administrar pagamentos.'],403);$q=$pdo->query('SELECT pg.id,pg.profissional_id,pr.nome AS profissional,pg.valor,pg.status,pg.metodo,pg.criado_em AS criadoEm,a.id AS assinaturaId,pl.nome AS plano FROM pagamentos_profissionais pg INNER JOIN profissionais pr ON pr.id=pg.profissional_id LEFT JOIN assinaturas_profissionais a ON a.id=pg.assinatura_id LEFT JOIN planos_assinatura pl ON pl.id=a.plano_id ORDER BY pg.id DESC');json_response(['success'=>true,'payments'=>$q->fetchAll()]);}
-function admin_update_professional_payment(PDO $pdo,array $data): never { $s=require_admin();if($s['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode aprovar pagamentos.'],403);$id=(int)($data['id']??0);$status=required_string($data,'status');if(!in_array($status,['aprovado','recusado','estornado','manual'],true))json_response(['success'=>false,'message'=>'Status de pagamento inválido.'],422);$pdo->beginTransaction();$q=$pdo->prepare('SELECT profissional_id,assinatura_id FROM pagamentos_profissionais WHERE id=? FOR UPDATE');$q->execute([$id]);$pay=$q->fetch();if(!$pay){$pdo->rollBack();json_response(['success'=>false,'message'=>'Pagamento não encontrado.'],404);}$q=$pdo->prepare('UPDATE pagamentos_profissionais SET status=?,pago_em=IF(? IN (\'aprovado\',\'manual\'),NOW(),NULL) WHERE id=?');$q->execute([$status,$status,$id]);if($pay['assinatura_id']){$subStatus=$status==='aprovado'||$status==='manual'?'ativa':($status==='estornado'?'cancelada':'inadimplente');$q=$pdo->prepare('UPDATE assinaturas_profissionais SET status=?,inicio=IF(?=\'ativa\' AND inicio IS NULL,CURDATE(),inicio),fim=IF(?=\'ativa\',DATE_ADD(CURDATE(),INTERVAL 1 MONTH),fim) WHERE id=?');$q->execute([$subStatus,$subStatus,$subStatus,$pay['assinatura_id']]);}$pdo->commit();audit_event($pdo,'pagamento_profissional_atualizado','pagamentos_profissionais',(string)$id,['status'=>$status]);json_response(['success'=>true,'status'=>$status]);}
+function admin_update_professional_payment(PDO $pdo,array $data): never { $s=require_admin();if($s['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode aprovar pagamentos.'],403);$id=(int)($data['id']??0);$status=required_string($data,'status');if(!in_array($status,['aprovado','recusado','estornado','manual'],true))json_response(['success'=>false,'message'=>'Status de pagamento inválido.'],422);$pdo->beginTransaction();$q=$pdo->prepare('SELECT profissional_id,assinatura_id FROM pagamentos_profissionais WHERE id=? FOR UPDATE');$q->execute([$id]);$pay=$q->fetch();if(!$pay){$pdo->rollBack();json_response(['success'=>false,'message'=>'Pagamento não encontrado.'],404);}$q=$pdo->prepare('UPDATE pagamentos_profissionais SET status=?,pago_em=CASE WHEN ? IN (\'aprovado\',\'manual\') THEN NOW() ELSE NULL END WHERE id=?');$q->execute([$status,$status,$id]);if($pay['assinatura_id']){$subStatus=$status==='aprovado'||$status==='manual'?'ativa':($status==='estornado'?'cancelada':'inadimplente');$q=$pdo->prepare('UPDATE assinaturas_profissionais SET status=?,inicio=CASE WHEN ?=\'ativa\' AND inicio IS NULL THEN CURRENT_DATE ELSE inicio END,fim=CASE WHEN ?=\'ativa\' THEN CURRENT_DATE + INTERVAL \'1 month\' ELSE fim END WHERE id=?');$q->execute([$subStatus,$subStatus,$subStatus,$pay['assinatura_id']]);}$pdo->commit();audit_event($pdo,'pagamento_profissional_atualizado','pagamentos_profissionais',(string)$id,['status'=>$status]);json_response(['success'=>true,'status'=>$status]);}
 
 function asaas_request(string $method,string $path,array $payload=[]): array {
     $key=getenv('ASAAS_API_KEY') ?: ''; if($key==='') throw new RuntimeException('Integração Asaas não configurada. Defina ASAAS_API_KEY no servidor.');
@@ -681,8 +681,8 @@ function professional_start_subscription(PDO $pdo,array $data): never {
 function aplicar_status_pagamento_asaas(PDO $pdo,string $paymentId,string $status): void {
     $map=['PAYMENT_RECEIVED'=>'aprovado','PAYMENT_CONFIRMED'=>'aprovado','PAYMENT_RECEIVED_IN_CASH'=>'aprovado','PAYMENT_OVERDUE'=>'recusado','PAYMENT_REFUNDED'=>'estornado','PAYMENT_CHARGEBACK_REQUESTED'=>'estornado','PAYMENT_CHARGEBACK_DISPUTE'=>'estornado','RECEIVED'=>'aprovado','CONFIRMED'=>'aprovado','RECEIVED_IN_CASH'=>'aprovado','OVERDUE'=>'recusado','REFUNDED'=>'estornado'];$local=$map[$status]??null;if($local===null)return;
     $q=$pdo->prepare('SELECT id,assinatura_id FROM pagamentos_profissionais WHERE referencia_externa=? LIMIT 1');$q->execute([$paymentId]);$pay=$q->fetch();if(!$pay)return;
-    $pdo->beginTransaction();$q=$pdo->prepare('UPDATE pagamentos_profissionais SET status=?,pago_em=IF(?=\'aprovado\',NOW(),NULL) WHERE id=?');$q->execute([$local,$local,$pay['id']]);
-    if($pay['assinatura_id']){$sub=$local==='aprovado'?'ativa':($local==='estornado'?'cancelada':'inadimplente');$q=$pdo->prepare('UPDATE assinaturas_profissionais SET status=?,inicio=IF(?=\'ativa\' AND inicio IS NULL,CURDATE(),inicio),fim=IF(?=\'ativa\',DATE_ADD(CURDATE(),INTERVAL 1 MONTH),fim) WHERE id=?');$q->execute([$sub,$sub,$sub,$pay['assinatura_id']]);}$pdo->commit();
+    $pdo->beginTransaction();$q=$pdo->prepare('UPDATE pagamentos_profissionais SET status=?,pago_em=CASE WHEN ?=\'aprovado\' THEN NOW() ELSE NULL END WHERE id=?');$q->execute([$local,$local,$pay['id']]);
+    if($pay['assinatura_id']){$sub=$local==='aprovado'?'ativa':($local==='estornado'?'cancelada':'inadimplente');$q=$pdo->prepare('UPDATE assinaturas_profissionais SET status=?,inicio=CASE WHEN ?=\'ativa\' AND inicio IS NULL THEN CURRENT_DATE ELSE inicio END,fim=CASE WHEN ?=\'ativa\' THEN CURRENT_DATE + INTERVAL \'1 month\' ELSE fim END WHERE id=?');$q->execute([$sub,$sub,$sub,$pay['assinatura_id']]);}$pdo->commit();
 }
 function asaas_webhook(PDO $pdo): never {
     $expected=getenv('ASAAS_WEBHOOK_TOKEN')?:'';$received=$_SERVER['HTTP_ASAAS_ACCESS_TOKEN']??'';if($expected===''||!hash_equals($expected,$received))json_response(['success'=>false,'message'=>'Webhook não autorizado.'],401);
@@ -968,13 +968,12 @@ function set_reminder(PDO $pdo, array $data): never
     $sus = required_string($data, 'sus');
 
     $stmt = $pdo->prepare(
-        'UPDATE consultas c
-         INNER JOIN pacientes p ON p.id = c.paciente_id
-         SET c.lembrete = 1,
-             c.notificado = 0
+        'UPDATE consultas AS c
+         SET lembrete = TRUE,
+             notificado = FALSE
          WHERE c.id = ?
-           AND p.sus = ?
-           AND c.status = "agendado"'
+           AND c.status = \'agendado\'
+           AND EXISTS (SELECT 1 FROM pacientes p WHERE p.id = c.paciente_id AND p.sus = ?)'
     );
 
     $stmt->execute([
@@ -1336,7 +1335,7 @@ function delete_health_indicator(PDO $pdo,array $data): never
 }
 function toggle_ubs_active(PDO $pdo,array $data): never
 {
-    $session=require_admin();if(!in_array($session['tipo'],['secretaria','desenvolvedor'],true))json_response(['success'=>false,'message'=>'Apenas a Secretaria de Saúde ou o desenvolvedor pode gerenciar unidades.'],403);$id=required_string($data,'ubs_id');$active=filter_var($data['ativa']??null,FILTER_VALIDATE_BOOLEAN,FILTER_NULL_ON_FAILURE);if($active===null)json_response(['success'=>false,'message'=>'Estado da UBS inválido.'],422);$q=$pdo->prepare('SELECT nome FROM ubs WHERE id=?');$q->execute([$id]);$name=$q->fetchColumn();if(!$name)json_response(['success'=>false,'message'=>'UBS não encontrada.'],404);$pdo->prepare('UPDATE ubs SET ativa=? WHERE id=?')->execute([$active?1:0,$id]);audit_event($pdo,$active?'ubs_reativada':'ubs_arquivada','ubs',$id,['nome'=>$name]);json_response(['success'=>true,'message'=>$active?'UBS reativada.':'UBS desativada e arquivada; os dados históricos foram preservados.','ubs'=>get_ubs($pdo,$id,true)]);
+    $session=require_admin();if(!in_array($session['tipo'],['secretaria','desenvolvedor'],true))json_response(['success'=>false,'message'=>'Apenas a Secretaria de Saúde ou o desenvolvedor pode gerenciar unidades.'],403);$id=required_string($data,'ubs_id');$active=filter_var($data['ativa']??null,FILTER_VALIDATE_BOOLEAN,FILTER_NULL_ON_FAILURE);if($active===null)json_response(['success'=>false,'message'=>'Estado da UBS inválido.'],422);$q=$pdo->prepare('SELECT nome FROM ubs WHERE id=?');$q->execute([$id]);$name=$q->fetchColumn();if(!$name)json_response(['success'=>false,'message'=>'UBS não encontrada.'],404);$pdo->prepare('UPDATE ubs SET ativa=? WHERE id=?')->execute([$active ? 'true' : 'false',$id]);audit_event($pdo,$active?'ubs_reativada':'ubs_arquivada','ubs',$id,['nome'=>$name]);json_response(['success'=>true,'message'=>$active?'UBS reativada.':'UBS desativada e arquivada; os dados históricos foram preservados.','ubs'=>get_ubs($pdo,$id,true)]);
 }
 function list_admin_ubs(PDO $pdo): never
 {
@@ -1351,7 +1350,7 @@ function create_secretaria_account(PDO $pdo,array $data): never
 {
     $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode provisionar o administrador da Secretaria.'],403);$user=required_string($data,'usuario');$password=(string)($data['senha']??'');
     if(!preg_match('/^[A-Za-z0-9._@-]{3,80}$/',$user))json_response(['success'=>false,'message'=>'Use um usuário de 3 a 80 caracteres: letras, números, ponto, hífen, sublinhado ou @.'],422);if(strlen($password)<12||strlen($password)>200)json_response(['success'=>false,'message'=>'A senha precisa ter entre 12 e 200 caracteres.'],422);
-    try{$q=$pdo->prepare("INSERT INTO administradores (usuario,senha_hash,tipo,ubs_id) VALUES (?,?,'secretaria',NULL)");$q->execute([$user,password_hash($password,PASSWORD_DEFAULT)]);$id=(int)$pdo->lastInsertId();}catch(PDOException $e){if((int)($e->errorInfo[1]??0)===1062)json_response(['success'=>false,'message'=>'Esse usuário já está cadastrado.'],409);throw $e;}
+    try{$q=$pdo->prepare("INSERT INTO administradores (usuario,senha_hash,tipo,ubs_id) VALUES (?,?,'secretaria',NULL)");$q->execute([$user,password_hash($password,PASSWORD_DEFAULT)]);$id=(int)$pdo->lastInsertId();}catch(PDOException $e){if(($e->errorInfo[0]??$e->getCode())==='23505'||(int)($e->errorInfo[1]??0)===1062)json_response(['success'=>false,'message'=>'Esse usuário já está cadastrado.'],409);throw $e;}
     audit_event($pdo,'administrador_secretaria_criado','administradores',(string)$id,['usuario'=>$user]);json_response(['success'=>true,'message'=>'Conta da Secretaria criada. Entregue o usuário e a senha de forma segura.','account'=>['id'=>$id,'usuario'=>$user]]);
 }
 function delete_secretaria_account(PDO $pdo,array $data): never
@@ -1918,7 +1917,7 @@ function auth_record_failure(PDO $pdo,string $key): void {
         $q=$pdo->prepare('SELECT tentativas,inicio_janela FROM tentativas_autenticacao WHERE chave=? FOR UPDATE');$q->execute([$key]);$row=$q->fetch();
         $chk=$pdo->prepare('SELECT (inicio_janela<DATE_SUB(NOW(),INTERVAL 15 MINUTE)) FROM tentativas_autenticacao WHERE chave=?');$chk->execute([$key]);$isExpired=(bool)$chk->fetchColumn();
         $attempts=$isExpired?1:((int)$row['tentativas']+1);
-        $q=$pdo->prepare('UPDATE tentativas_autenticacao SET tentativas=?,inicio_janela=IF(?,NOW(),inicio_janela),bloqueado_ate=IF(? >= 5,DATE_ADD(NOW(),INTERVAL 15 MINUTE),NULL) WHERE chave=?');$q->execute([$attempts,$isExpired?1:0,$attempts,$key]);$pdo->commit();
+        $q=$pdo->prepare('UPDATE tentativas_autenticacao SET tentativas=?,inicio_janela=CASE WHEN ? = 1 THEN NOW() ELSE inicio_janela END,bloqueado_ate=CASE WHEN ? >= 5 THEN DATE_ADD(NOW(),INTERVAL 15 MINUTE) ELSE NULL END WHERE chave=?');$q->execute([$attempts,$isExpired?1:0,$attempts,$key]);$pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Falha no limitador de acesso: '.$e->getMessage());}
 }
 function auth_clear_attempts(PDO $pdo,string $key): void {$q=$pdo->prepare('DELETE FROM tentativas_autenticacao WHERE chave=?');$q->execute([$key]);}
@@ -1967,23 +1966,23 @@ function professional_save_schedule(PDO $pdo,array $data): never {
             if(!$validTime($start)||!$validTime($end)||strtotime($start)>=strtotime($end)){ $start='09:00'; $end='17:00'; }
             if($duration<5||$duration>240) $duration=30;
             if(($breakStart==='')!==($breakEnd==='')||($breakStart!==''&&(!$validTime($breakStart)||!$validTime($breakEnd)||strtotime($breakStart)>=strtotime($breakEnd)||strtotime($breakStart)<strtotime($start)||strtotime($breakEnd)>strtotime($end)))){ $breakStart=''; $breakEnd=''; }
-            $normalized[]=['dia'=>$day,'inicio'=>$start,'fim'=>$end,'duracao'=>$duration,'pausa_inicio'=>$breakStart?:null,'pausa_fim'=>$breakEnd?:null,'ativo'=>0];
+            $normalized[]=['dia'=>$day,'inicio'=>$start,'fim'=>$end,'duracao'=>$duration,'pausa_inicio'=>$breakStart?:null,'pausa_fim'=>$breakEnd?:null,'ativo'=>false];
             continue;
         }
         if(!$validTime($start)||!$validTime($end)||strtotime($start)>=strtotime($end)||$duration<5||$duration>240) json_response(['success'=>false,'message'=>'Revise o início, fim e duração do expediente.'],422);
         if(($breakStart==='')!==($breakEnd==='')) json_response(['success'=>false,'message'=>'Informe início e fim da pausa, ou deixe os dois vazios.'],422);
         if($breakStart!==''&&(!$validTime($breakStart)||!$validTime($breakEnd)||strtotime($breakStart)>=strtotime($breakEnd)||strtotime($breakStart)<strtotime($start)||strtotime($breakEnd)>strtotime($end))) json_response(['success'=>false,'message'=>'A pausa precisa estar dentro do expediente.'],422);
-        $normalized[]=['dia'=>$day,'inicio'=>$start,'fim'=>$end,'duracao'=>$duration,'pausa_inicio'=>$breakStart?:null,'pausa_fim'=>$breakEnd?:null,'ativo'=>1];
+        $normalized[]=['dia'=>$day,'inicio'=>$start,'fim'=>$end,'duracao'=>$duration,'pausa_inicio'=>$breakStart?:null,'pausa_fim'=>$breakEnd?:null,'ativo'=>true];
     }
     $pdo->beginTransaction();
     try{
         $q=$pdo->prepare('SELECT id FROM profissionais WHERE id=? FOR UPDATE'); $q->execute([$s['id']]);
         $pdo->prepare('DELETE FROM agendas_profissionais WHERE profissional_id=?')->execute([$s['id']]);
         $q=$pdo->prepare('INSERT INTO agendas_profissionais (profissional_id,dia_semana,inicio,fim,duracao_minutos,pausa_inicio,pausa_fim,ativo) VALUES (?,?,?,?,?,?,?,?)');
-        foreach($normalized as $r) $q->execute([$s['id'],$r['dia'],$r['inicio'],$r['fim'],$r['duracao'],$r['pausa_inicio'],$r['pausa_fim'],$r['ativo']]);
+        foreach($normalized as $r) $q->execute([$s['id'],$r['dia'],$r['inicio'],$r['fim'],$r['duracao'],$r['pausa_inicio'],$r['pausa_fim'],$r['ativo'] ? 'true' : 'false']);
         $pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
-    $activeDays=count(array_filter($normalized,static fn(array $r): bool => $r['ativo']===1));
+    $activeDays=count(array_filter($normalized,static fn(array $r): bool => $r['ativo']===true));
     audit_professional_event($pdo,(int)$s['id'],'agenda_semanal_atualizada','agendas_profissionais',(string)$s['id'],['dias_ativos'=>$activeDays]);
     professional_schedule($pdo);
 }
