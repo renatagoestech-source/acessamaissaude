@@ -253,11 +253,11 @@ try {
 
 } catch (PDOException $e) {
 
-    error_log($e->getMessage());
+    error_log('Falha PDO; SQLSTATE/código ' . (string)$e->getCode());
 
     json_response([
         'success' => false,
-        'message' => 'Erro de banco de dados. Verifique se o MySQL do XAMPP está iniciado e se o banco foi instalado.'
+        'message' => 'Não foi possível acessar a base de dados. Tente novamente mais tarde.'
     ], 500);
 
 } catch (Throwable $e) {
@@ -340,7 +340,7 @@ function get_ubs_from_row(PDO $pdo, array $row, bool $admin): array
         'endereco' => $row['endereco'],
         'telefone' => $row['telefone'],
         'horario' => $row['horario'],
-        'ativa' => (bool)($row['ativa'] ?? 1),
+        'ativa' => database_bool($row['ativa'] ?? true),
         'limiteDiario' => (int)($row['limite_diario'] ?? 12),
         'especialidades' => array_column($specialties->fetchAll(), 'nome'),
         'servicos' => array_column($services->fetchAll(), 'nome'),
@@ -372,7 +372,7 @@ function professional_register(PDO $pdo, array $data): never {
         $_SESSION['professional']=['id'=>(int)$p['id'],'email'=>$p['email'],'nome'=>$p['nome'],'auth_version'=>(int)$p['auth_version']];
         audit_professional_event($pdo,$id,'cadastro_profissional','profissionais',(string)$id,['email_hash'=>hash('sha256',$email)]);
         json_response(['success'=>true,'message'=>'Conta profissional criada. Você já pode começar.','csrf_token'=>$_SESSION['_csrf_token'],'professional'=>['id'=>(int)$p['id'],'nome'=>$p['nome'],'email'=>$p['email']]]);
-    } catch(PDOException $e){ if((int)($e->errorInfo[1]??0)===1062) json_response(['success'=>false,'message'=>'Este e-mail já está cadastrado. Entre ou use “Esqueci minha senha”.'],409); json_response(['success'=>false,'message'=>'Não foi possível criar a conta profissional. Verifique os dados e tente novamente.'],500); }
+    } catch(PDOException $e){ if(database_is_unique_violation($e)) json_response(['success'=>false,'message'=>'Este e-mail já está cadastrado. Entre ou use “Esqueci minha senha”.'],409); json_response(['success'=>false,'message'=>'Não foi possível criar a conta profissional. Verifique os dados e tente novamente.'],500); }
 }
 function slug_publico(PDO $pdo,string $nome): string { $s=iconv('UTF-8','ASCII//TRANSLIT',$nome);$s=preg_replace('/[^a-z0-9]+/','-',strtolower((string)$s));$s=trim($s,'-')?:'profissional';$base=$s;$i=2;$q=$pdo->prepare('SELECT 1 FROM profissionais WHERE slug=? LIMIT 1');while(true){$q->execute([$s]);if(!$q->fetchColumn())return $s;$s=$base.'-'.$i++;} }
 function public_clinic(PDO $pdo,string $slug): never {
@@ -411,7 +411,7 @@ function public_clinic_book(PDO $pdo,array $data): never {
             $q=$pdo->prepare('UPDATE pacientes SET nome=?,telefone=?,email=? WHERE id=?'); $q->execute([$nome,$telefone,$email,$patientId]);
         }
         $q=$pdo->prepare('INSERT IGNORE INTO profissional_pacientes (profissional_id,paciente_id,consentimento_em) VALUES (?,?,NOW())');$q->execute([$pro['id'],$patientId]);
-        $status=((int)$pro['confirmacao_automatica']===1)?'confirmada':'solicitada';
+        $status=database_bool($pro['confirmacao_automatica']??false)?'confirmada':'solicitada';
         $manageToken=bin2hex(random_bytes(32)); $id='PUB'.date('YmdHis').bin2hex(random_bytes(3));
         $q=$pdo->prepare('INSERT INTO consultas_profissionais (id,profissional_id,paciente_id,data_consulta,horario,duracao_minutos,assunto,valor,status,confirmada_em,manage_token_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
         $q->execute([$id,$pro['id'],$patientId,$date,$time,(int)$slot['duracao'],trim((string)($data['assunto']??''))?:null,$pro['valor_consulta'],$status,$status==='confirmada'?date('Y-m-d H:i:s'):null,hash('sha256',$manageToken)]);
@@ -438,7 +438,7 @@ function public_clinic_join_waitlist(PDO $pdo,array $data): never {
     $q=$pdo->prepare('INSERT IGNORE INTO profissional_pacientes (profissional_id,paciente_id,consentimento_em) VALUES (?,?,NOW())'); $q->execute([$pro['id'],$patientId]);
     $q=$pdo->prepare('INSERT IGNORE INTO lista_espera_profissionais (paciente_id,profissional_id,data_consulta) VALUES (?,?,?)'); $q->execute([$patientId,$pro['id'],$date]);
     if($q->rowCount()===0) json_response(['success'=>true,'message'=>'Você já está na lista de espera desta data.']);
-    json_response(['success'=>true,'message'=>(int)$pro['confirmacao_automatica']===1?'Você entrou na lista de espera. Se houver cancelamento, a vaga será agendada automaticamente e você receberá um aviso.':'Você entrou na lista de espera. Se houver cancelamento, a clínica receberá sua solicitação para confirmar a vaga.','patient_sus'=>null]);
+    json_response(['success'=>true,'message'=>database_bool($pro['confirmacao_automatica']??false)?'Você entrou na lista de espera. Se houver cancelamento, a vaga será agendada automaticamente e você receberá um aviso.':'Você entrou na lista de espera. Se houver cancelamento, a clínica receberá sua solicitação para confirmar a vaga.','patient_sus'=>null]);
 }
 
 function professional_login(PDO $pdo, array $data): never {
@@ -466,7 +466,7 @@ function professional_update_settings(PDO $pdo,array $data): never {
     if(!array_key_exists('logo_arquivo',$data)){ $keep=$pdo->prepare('SELECT logo_arquivo FROM profissionais WHERE id=?'); $keep->execute([$s['id']]); $data['logo_arquivo']=$keep->fetchColumn(); }
     $limite=max(1,(int)($data['limite_diario']??12));
     $fields=['cnpj','especialidade','registro_profissional','telefone','whatsapp','endereco','modalidade','apresentacao','logo_arquivo','horario_funcionamento','aviso_publico','mensagem_pos_venda','cor_primaria','cor_secundaria']; $v=[]; foreach($fields as $f)$v[]=trim((string)($data[$f]??''))?:null;
-    $confirmacao=isset($data['confirmacao_automatica'])?(int)(bool)$data['confirmacao_automatica']:1;
+    $confirmacao=isset($data['confirmacao_automatica'])?filter_var($data['confirmacao_automatica'],FILTER_VALIDATE_BOOLEAN):true;
     $cancelar=max(0,min(720,(int)($data['cancelamento_ate_horas']??24)));
     $remarcar=max(0,min(720,(int)($data['remarcacao_ate_horas']??24)));
     $q=$pdo->prepare('UPDATE profissionais SET nome=?,cnpj=?,especialidade=?,registro_profissional=?,telefone=?,whatsapp=?,endereco=?,modalidade=?,apresentacao=?,logo_arquivo=?,horario_funcionamento=?,aviso_publico=?,mensagem_pos_venda=?,cor_primaria=COALESCE(?,cor_primaria),cor_secundaria=COALESCE(?,cor_secundaria),valor_consulta=?,limite_diario=?,confirmacao_automatica=?,cancelamento_ate_horas=?,remarcacao_ate_horas=? WHERE id=?');
@@ -624,7 +624,7 @@ function promote_professional_waitlist(PDO $pdo,int $professionalId,string $date
         $q=$pdo->prepare("SELECT COUNT(*) FROM consultas_profissionais WHERE profissional_id=? AND data_consulta=? AND status NOT IN ('cancelada','faltou')");$q->execute([$professionalId,$date]);$count=(int)$q->fetchColumn();if($count>=max(1,(int)$pro['limite_diario'])){$pdo->rollBack();return null;}
         $q=$pdo->prepare('SELECT l.id,l.paciente_id,p.nome,p.email FROM lista_espera_profissionais l INNER JOIN pacientes p ON p.id=l.paciente_id WHERE l.profissional_id=? AND l.data_consulta=? AND l.status="pendente" ORDER BY l.id LIMIT 1 FOR UPDATE');$q->execute([$professionalId,$date]);$row=$q->fetch();if(!$row){$pdo->rollBack();return null;}
         $exists=$pdo->prepare("SELECT id FROM consultas_profissionais WHERE paciente_id=? AND profissional_id=? AND data_consulta=? AND status NOT IN ('cancelada','faltou') LIMIT 1");$exists->execute([$row['paciente_id'],$professionalId,$date]);if($exists->fetch()){ $pdo->prepare('UPDATE lista_espera_profissionais SET status="cancelado" WHERE id=?')->execute([$row['id']]);$pdo->commit();return promote_professional_waitlist($pdo,$professionalId,$date,$time); }
-        $status=(int)$pro['confirmacao_automatica']===1?'confirmada':'solicitada';$manageToken=bin2hex(random_bytes(32));$id='PWL'.date('YmdHis').bin2hex(random_bytes(3));$ins=$pdo->prepare("INSERT INTO consultas_profissionais (id,profissional_id,paciente_id,data_consulta,horario,duracao_minutos,assunto,valor,status,confirmada_em,manage_token_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)");$ins->execute([$id,$professionalId,$row['paciente_id'],$date,$time,(int)$free['duracao'],'Vaga oferecida pela lista de espera',$pro['valor_consulta'],$status,$status==='confirmada'?date('Y-m-d H:i:s'):null,hash('sha256',$manageToken)]);
+        $status=database_bool($pro['confirmacao_automatica']??false)?'confirmada':'solicitada';$manageToken=bin2hex(random_bytes(32));$id='PWL'.date('YmdHis').bin2hex(random_bytes(3));$ins=$pdo->prepare("INSERT INTO consultas_profissionais (id,profissional_id,paciente_id,data_consulta,horario,duracao_minutos,assunto,valor,status,confirmada_em,manage_token_hash) VALUES (?,?,?,?,?,?,?,?,?,?,?)");$ins->execute([$id,$professionalId,$row['paciente_id'],$date,$time,(int)$free['duracao'],'Vaga oferecida pela lista de espera',$pro['valor_consulta'],$status,$status==='confirmada'?date('Y-m-d H:i:s'):null,hash('sha256',$manageToken)]);
         $pdo->prepare('UPDATE lista_espera_profissionais SET status="agendado",consulta_id=? WHERE id=?')->execute([$id,$row['id']]);
         $msg="Olá, {$row['nome']}! Uma vaga ficou disponível na {$pro['nome']}. ".($status==='confirmada'?'Sua consulta está confirmada.':'Sua solicitação foi encaminhada para confirmação da clínica.')." Data: ".date('d/m/Y',strtotime($date))." às ".substr($time,0,5).". Protocolo: {$id}.";
         $pdo->prepare('INSERT IGNORE INTO notificacoes_profissionais (profissional_id,paciente_id,consulta_id,tipo,canal,mensagem,agendada_para,status) VALUES (?,? ,?,"lista_espera_agendada","whatsapp",?,NOW(),"pendente")')->execute([$professionalId,$row['paciente_id'],$id,$msg]);
@@ -798,8 +798,8 @@ function get_patient_appointments(PDO $pdo, string $sus): never
     $rows = $stmt->fetchAll();
 
     foreach ($rows as &$row) {
-        $row['lembrete'] = (bool)$row['lembrete'];
-        $row['notificado'] = (bool)$row['notificado'];
+        $row['lembrete'] = database_bool($row['lembrete']);
+        $row['notificado'] = database_bool($row['notificado']);
     }
 
     json_response([
@@ -884,8 +884,8 @@ function appointment_by_id(PDO $pdo, string $id): array
         ], 404);
     }
 
-    $row['lembrete'] = (bool)$row['lembrete'];
-    $row['notificado'] = (bool)$row['notificado'];
+    $row['lembrete'] = database_bool($row['lembrete']);
+    $row['notificado'] = database_bool($row['notificado']);
 
     return $row;
 }
@@ -968,13 +968,12 @@ function set_reminder(PDO $pdo, array $data): never
     $sus = required_string($data, 'sus');
 
     $stmt = $pdo->prepare(
-        'UPDATE consultas c
-         INNER JOIN pacientes p ON p.id = c.paciente_id
-         SET c.lembrete = 1,
-             c.notificado = 0
-         WHERE c.id = ?
-           AND p.sus = ?
-           AND c.status = "agendado"'
+        'UPDATE consultas
+         SET lembrete = TRUE,
+             notificado = FALSE
+         WHERE id = ?
+           AND status = "agendado"
+           AND EXISTS (SELECT 1 FROM pacientes p WHERE p.id = consultas.paciente_id AND p.sus = ?)'
     );
 
     $stmt->execute([
@@ -1234,7 +1233,7 @@ function admin_update_support(PDO $pdo, array $data): never
     if(!$id||!in_array($status,['aberto','em_atendimento','resolvido'],true))json_response(['success'=>false,'message'=>'Chamado ou status inválido.'],422);
     $q=$pdo->prepare('SELECT destino_tipo,encaminhado_desenvolvedor FROM suporte_mensagens WHERE id=?');$q->execute([$id]);$ticket=$q->fetch();
     if(!$ticket)json_response(['success'=>false,'message'=>'Chamado não encontrado.'],404);
-    if($ticket['destino_tipo']==='clinica'&&(int)$ticket['encaminhado_desenvolvedor']===1){
+    if($ticket['destino_tipo']==='clinica'&&database_bool($ticket['encaminhado_desenvolvedor'])){
         if($resposta==='')json_response(['success'=>false,'message'=>'Escreva a orientação técnica para a clínica.'],422);
         $pdo->prepare('UPDATE suporte_mensagens SET resposta_desenvolvedor=?,status="em_atendimento" WHERE id=?')->execute([$resposta,$id]);
         audit_event($pdo,'orientacao_tecnica_enviada_clinica','suporte_mensagens',(string)$id);
@@ -1336,7 +1335,7 @@ function delete_health_indicator(PDO $pdo,array $data): never
 }
 function toggle_ubs_active(PDO $pdo,array $data): never
 {
-    $session=require_admin();if(!in_array($session['tipo'],['secretaria','desenvolvedor'],true))json_response(['success'=>false,'message'=>'Apenas a Secretaria de Saúde ou o desenvolvedor pode gerenciar unidades.'],403);$id=required_string($data,'ubs_id');$active=filter_var($data['ativa']??null,FILTER_VALIDATE_BOOLEAN,FILTER_NULL_ON_FAILURE);if($active===null)json_response(['success'=>false,'message'=>'Estado da UBS inválido.'],422);$q=$pdo->prepare('SELECT nome FROM ubs WHERE id=?');$q->execute([$id]);$name=$q->fetchColumn();if(!$name)json_response(['success'=>false,'message'=>'UBS não encontrada.'],404);$pdo->prepare('UPDATE ubs SET ativa=? WHERE id=?')->execute([$active?1:0,$id]);audit_event($pdo,$active?'ubs_reativada':'ubs_arquivada','ubs',$id,['nome'=>$name]);json_response(['success'=>true,'message'=>$active?'UBS reativada.':'UBS desativada e arquivada; os dados históricos foram preservados.','ubs'=>get_ubs($pdo,$id,true)]);
+    $session=require_admin();if(!in_array($session['tipo'],['secretaria','desenvolvedor'],true))json_response(['success'=>false,'message'=>'Apenas a Secretaria de Saúde ou o desenvolvedor pode gerenciar unidades.'],403);$id=required_string($data,'ubs_id');$active=filter_var($data['ativa']??null,FILTER_VALIDATE_BOOLEAN,FILTER_NULL_ON_FAILURE);if($active===null)json_response(['success'=>false,'message'=>'Estado da UBS inválido.'],422);$q=$pdo->prepare('SELECT nome FROM ubs WHERE id=?');$q->execute([$id]);$name=$q->fetchColumn();if(!$name)json_response(['success'=>false,'message'=>'UBS não encontrada.'],404);$pdo->prepare('UPDATE ubs SET ativa=? WHERE id=?')->execute([$active,$id]);audit_event($pdo,$active?'ubs_reativada':'ubs_arquivada','ubs',$id,['nome'=>$name]);json_response(['success'=>true,'message'=>$active?'UBS reativada.':'UBS desativada e arquivada; os dados históricos foram preservados.','ubs'=>get_ubs($pdo,$id,true)]);
 }
 function list_admin_ubs(PDO $pdo): never
 {
@@ -1351,7 +1350,7 @@ function create_secretaria_account(PDO $pdo,array $data): never
 {
     $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode provisionar o administrador da Secretaria.'],403);$user=required_string($data,'usuario');$password=(string)($data['senha']??'');
     if(!preg_match('/^[A-Za-z0-9._@-]{3,80}$/',$user))json_response(['success'=>false,'message'=>'Use um usuário de 3 a 80 caracteres: letras, números, ponto, hífen, sublinhado ou @.'],422);if(strlen($password)<12||strlen($password)>200)json_response(['success'=>false,'message'=>'A senha precisa ter entre 12 e 200 caracteres.'],422);
-    try{$q=$pdo->prepare("INSERT INTO administradores (usuario,senha_hash,tipo,ubs_id) VALUES (?,?,'secretaria',NULL)");$q->execute([$user,password_hash($password,PASSWORD_DEFAULT)]);$id=(int)$pdo->lastInsertId();}catch(PDOException $e){if((int)($e->errorInfo[1]??0)===1062)json_response(['success'=>false,'message'=>'Esse usuário já está cadastrado.'],409);throw $e;}
+    try{$q=$pdo->prepare("INSERT INTO administradores (usuario,senha_hash,tipo,ubs_id) VALUES (?,?,'secretaria',NULL)");$q->execute([$user,password_hash($password,PASSWORD_DEFAULT)]);$id=(int)$pdo->lastInsertId();}catch(PDOException $e){if(database_is_unique_violation($e))json_response(['success'=>false,'message'=>'Esse usuário já está cadastrado.'],409);throw $e;}
     audit_event($pdo,'administrador_secretaria_criado','administradores',(string)$id,['usuario'=>$user]);json_response(['success'=>true,'message'=>'Conta da Secretaria criada. Entregue o usuário e a senha de forma segura.','account'=>['id'=>$id,'usuario'=>$user]]);
 }
 function delete_secretaria_account(PDO $pdo,array $data): never
@@ -1428,7 +1427,7 @@ function login_admin(PDO $pdo, array $data): never
     if (
         !$admin ||
         !password_verify($senha, $admin['senha_hash']) ||
-        ($admin['tipo'] === 'ubs' && (int)($admin['ubs_ativa'] ?? 0) !== 1)
+        ($admin['tipo'] === 'ubs' && !database_bool($admin['ubs_ativa'] ?? false))
     ) {
         auth_record_failure($pdo,$attemptKey);
         json_response([
@@ -1892,8 +1891,8 @@ function admin_appointments(PDO $pdo): never
     $rows = $stmt->fetchAll();
 
     foreach ($rows as &$row) {
-        $row['lembrete'] = (bool)$row['lembrete'];
-        $row['notificado'] = (bool)$row['notificado'];
+        $row['lembrete'] = database_bool($row['lembrete']);
+        $row['notificado'] = database_bool($row['notificado']);
     }
 
     json_response([
@@ -1909,16 +1908,16 @@ function auth_attempt_key(string $scope,string $identity): string {
     return hash('sha256',$scope.'|'.strtolower(trim($identity)).'|'.$ip);
 }
 function auth_is_limited(PDO $pdo,string $key): bool {
-    $q=$pdo->prepare('SELECT (bloqueado_ate IS NOT NULL AND bloqueado_ate>NOW()) FROM tentativas_autenticacao WHERE chave=?');$q->execute([$key]);return (bool)$q->fetchColumn();
+    $q=$pdo->prepare('SELECT (bloqueado_ate IS NOT NULL AND bloqueado_ate>NOW()) FROM tentativas_autenticacao WHERE chave=?');$q->execute([$key]);return database_bool($q->fetchColumn());
 }
 function auth_record_failure(PDO $pdo,string $key): void {
     $pdo->beginTransaction();
     try {
         $q=$pdo->prepare('INSERT IGNORE INTO tentativas_autenticacao (chave,tentativas,inicio_janela) VALUES (?,0,NOW())');$q->execute([$key]);
         $q=$pdo->prepare('SELECT tentativas,inicio_janela FROM tentativas_autenticacao WHERE chave=? FOR UPDATE');$q->execute([$key]);$row=$q->fetch();
-        $chk=$pdo->prepare('SELECT (inicio_janela<DATE_SUB(NOW(),INTERVAL 15 MINUTE)) FROM tentativas_autenticacao WHERE chave=?');$chk->execute([$key]);$isExpired=(bool)$chk->fetchColumn();
+        $chk=$pdo->prepare('SELECT (inicio_janela<DATE_SUB(NOW(),INTERVAL 15 MINUTE)) FROM tentativas_autenticacao WHERE chave=?');$chk->execute([$key]);$isExpired=database_bool($chk->fetchColumn());
         $attempts=$isExpired?1:((int)$row['tentativas']+1);
-        $q=$pdo->prepare('UPDATE tentativas_autenticacao SET tentativas=?,inicio_janela=IF(?,NOW(),inicio_janela),bloqueado_ate=IF(? >= 5,DATE_ADD(NOW(),INTERVAL 15 MINUTE),NULL) WHERE chave=?');$q->execute([$attempts,$isExpired?1:0,$attempts,$key]);$pdo->commit();
+        $q=$pdo->prepare('UPDATE tentativas_autenticacao SET tentativas=?,inicio_janela=IF(?,NOW(),inicio_janela),bloqueado_ate=IF(? >= 5,DATE_ADD(NOW(),INTERVAL 15 MINUTE),NULL) WHERE chave=?');$q->execute([$attempts,$isExpired,$attempts,$key]);$pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();error_log('Falha no limitador de acesso: '.$e->getMessage());}
 }
 function auth_clear_attempts(PDO $pdo,string $key): void {$q=$pdo->prepare('DELETE FROM tentativas_autenticacao WHERE chave=?');$q->execute([$key]);}
@@ -1955,7 +1954,7 @@ function professional_save_schedule(PDO $pdo,array $data): never {
     $normalized=[]; $seenDays=[];
     foreach($days as $row){
         if(!is_array($row)) json_response(['success'=>false,'message'=>'Revise os dados da semana.'],422);
-        $day=(int)($row['dia']??-1); $active=(int)(bool)($row['ativo']??false);
+        $day=(int)($row['dia']??-1); $active=(int)database_bool($row['ativo']??false);
         if($day<0||$day>6) json_response(['success'=>false,'message'=>'Dia da semana inválido.'],422);
         if(isset($seenDays[$day])) json_response(['success'=>false,'message'=>'Cada dia da semana deve aparecer uma única vez.'],422);
         $seenDays[$day]=true;
@@ -1980,7 +1979,7 @@ function professional_save_schedule(PDO $pdo,array $data): never {
         $q=$pdo->prepare('SELECT id FROM profissionais WHERE id=? FOR UPDATE'); $q->execute([$s['id']]);
         $pdo->prepare('DELETE FROM agendas_profissionais WHERE profissional_id=?')->execute([$s['id']]);
         $q=$pdo->prepare('INSERT INTO agendas_profissionais (profissional_id,dia_semana,inicio,fim,duracao_minutos,pausa_inicio,pausa_fim,ativo) VALUES (?,?,?,?,?,?,?,?)');
-        foreach($normalized as $r) $q->execute([$s['id'],$r['dia'],$r['inicio'],$r['fim'],$r['duracao'],$r['pausa_inicio'],$r['pausa_fim'],$r['ativo']]);
+        foreach($normalized as $r) $q->execute([$s['id'],$r['dia'],$r['inicio'],$r['fim'],$r['duracao'],$r['pausa_inicio'],$r['pausa_fim'],(bool)$r['ativo']]);
         $pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     $activeDays=count(array_filter($normalized,static fn(array $r): bool => $r['ativo']===1));
@@ -2007,7 +2006,7 @@ function professional_slots(PDO $pdo,int $professionalId,string $date,?string $e
 function public_clinic_slots(PDO $pdo,string $slug,string $date): never {
     if(!valid_date($date)||$date<date('Y-m-d'))json_response(['success'=>false,'message'=>'Escolha uma data futura válida.'],422);
     $q=$pdo->prepare("SELECT id,confirmacao_automatica AS confirmacaoAutomatica,cancelamento_ate_horas AS cancelamentoAteHoras,remarcacao_ate_horas AS remarcacaoAteHoras FROM profissionais WHERE slug=? AND status='ativo'");$q->execute([$slug]);$p=$q->fetch();if(!$p)json_response(['success'=>false,'message'=>'Clínica não encontrada.'],404);
-    json_response(['success'=>true,'slots'=>professional_slots($pdo,(int)$p['id'],$date),'confirmacaoAutomatica'=>(bool)$p['confirmacaoAutomatica']]);
+    json_response(['success'=>true,'slots'=>professional_slots($pdo,(int)$p['id'],$date),'confirmacaoAutomatica'=>database_bool($p['confirmacaoAutomatica']??false)]);
 }
 function email_delivery_configured(): bool {return (bool)(getenv('RESEND_API_KEY')&&getenv('MAIL_FROM')&&getenv('APP_URL'));}
 function app_public_url(): string {

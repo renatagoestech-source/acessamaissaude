@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/postgres_compat.php';
+
 const DB_HOST = '127.0.0.1';
 const DB_PORT = '3306';
 const DB_NAME = 'conecta_saude';
@@ -11,6 +13,18 @@ function db(): PDO
 {
     static $pdo = null;
     if ($pdo instanceof PDO) {
+        return $pdo;
+    }
+    $databaseUrl = trim((string)(getenv('DATABASE_URL') ?: ''));
+    if ($databaseUrl !== '') {
+        $connection = postgres_connection_details($databaseUrl);
+        $pdo = new PostgresCompatPDO($connection['dsn'], $connection['user'], $connection['password'], [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+        // O esquema Supabase é mantido fora do bootstrap; nenhuma DDL ou migração
+        // de dados deve ser executada automaticamente durante uma requisição.
         return $pdo;
     }
     $manualHost = getenv('ACESSA_DB_HOST') ?: '';

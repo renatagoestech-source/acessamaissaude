@@ -67,6 +67,10 @@ function require_csrf(): void
 
 function json_response(array $data, int $status = 200): never
 {
+    if (function_exists('database_normalize_booleans')) {
+        $data = database_normalize_booleans($data);
+    }
+
     // Remove qualquer warning/saída acidental antes do JSON, evitando
     // que o navegador receba uma resposta inválida após um agendamento.
     while (ob_get_level() > 0) {
