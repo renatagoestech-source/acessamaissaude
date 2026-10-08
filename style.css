@@ -161,3 +161,6 @@ body.clinic-login-route #appShell{display:none!important}
 .professional-calendar .calendar-event{font-size:8px;line-height:1.1;padding:2px 3px}
 @media(max-width:800px){.professional-calendar{gap:3px}.professional-calendar .calendar-cell{min-height:56px;padding:3px}.professional-calendar .calendar-event{display:none}}
 @media(max-width:520px){.clinic-public-link-panel{padding:16px}.clinic-public-link-panel .actions{flex-direction:column;align-items:stretch}.clinic-logo-preview{width:100%;justify-content:space-between}.professional-calendar .calendar-cell{min-height:48px}.professional-calendar .calendar-weekday{font-size:10px}}
+/* A variante branca do logo precisa de um fundo escuro na barra lateral. */
+.brand-top-logo{background:linear-gradient(145deg,#0b7779 0%,#034c50 100%);border:1px solid rgba(255,255,255,.16)}
+.brand-top-logo .brand-fallback{color:#fff}
