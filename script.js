@@ -17,6 +17,7 @@ function appPath(path) {
 
 const API_URL = appPath("/api.php");
 const STORAGE_PATIENT = "acessaMaisSaude_patient_v1";
+const STORAGE_LAST_UBS = "acessaMaisSaude_last_ubs_v1";
 const CPF_STORAGE_KEY = 'acessaMaisSaude_cpf_v1';
 
 const HORARIOS_MANHA = [
@@ -333,6 +334,29 @@ function escapeHTML(text) {
         .replaceAll("'", "&#039;");
 }
 
+function normalizarCpf(value) {
+    return String(value ?? "").replace(/\D/g, "");
+}
+
+function validarCpf(value) {
+    const cpf = normalizarCpf(value);
+    if (cpf.length !== 11 || /^(\d)\1{10}$/.test(cpf)) return false;
+    const digit = (base, weight) => {
+        let sum = 0;
+        for (let i = 0; i < base.length; i++) sum += Number(base[i]) * (weight - i);
+        const remainder = (sum * 10) % 11;
+        return remainder === 10 ? 0 : remainder;
+    };
+    const first = digit(cpf.slice(0, 9), 10);
+    const second = digit(cpf.slice(0, 10), 11);
+    return first === Number(cpf[9]) && second === Number(cpf[10]);
+}
+
+function formatarCpf(value) {
+    const cpf = normalizarCpf(value);
+    return cpf.length === 11 ? cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4") : String(value ?? "");
+}
+
 function toast(mensagem) {
 
     const elemento = $("toast");
@@ -446,6 +470,7 @@ async function salvarPaciente() {
             STORAGE_PATIENT,
             JSON.stringify(data.patient)
         );
+        sessionStorage.setItem(STORAGE_LAST_UBS, String(data.patient?.ubsId || ubsId));
 
         definirModoUsuario(true);
 
@@ -518,52 +543,29 @@ async function salvarPerfilPaciente() {
     }
 }
 
-function renderUBS() {
-
+function renderUBS(showAll = false) {
     const grid = $("ubsGrid");
     if (!grid) return;
-
     grid.innerHTML = "";
-
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
-    const unidades = paciente?.ubsId ? ubsList.filter(ubs => ubs.id === paciente.ubsId) : ubsList;
-    unidades.forEach(function (ubs) {
-
+    const preferredId = paciente?.ubsId || sessionStorage.getItem(STORAGE_LAST_UBS);
+    const hasPreferred = preferredId && ubsList.some(ubs => String(ubs.id) === String(preferredId));
+    const unidades = !showAll && hasPreferred
+        ? ubsList.filter(ubs => String(ubs.id) === String(preferredId))
+        : ubsList;
+    unidades.forEach(ubs => {
         const card = document.createElement("div");
-
         card.className = "ubs-card";
-
-        card.innerHTML = `
-            <div class="ubs-icon">🏥</div>
-
-            <h3>${escapeHTML(ubs.nome)}</h3>
-
-            <p>📍 ${escapeHTML(ubs.endereco)}</p>
-
-            <p>☎ ${escapeHTML(ubs.telefone)}</p>
-
-            <p>🕐 ${escapeHTML(ubs.horario)}</p>
-
-            <br>
-
-            <button class="btn primary">
-                Entrar na UBS →
-            </button>
-        `;
-
-        card.addEventListener("click", function () {
-            abrirUBS(ubs.id);
-        });
-
+        card.innerHTML = `<div class="ubs-icon">🏥</div><h3>${escapeHTML(ubs.nome)}</h3><p>📍 ${escapeHTML(ubs.endereco)}</p><p>☎ ${escapeHTML(ubs.telefone)}</p><p>🕐 ${escapeHTML(ubs.horario)}</p><br><button class="btn primary" type="button">Entrar na UBS →</button>`;
+        card.addEventListener("click", () => abrirUBS(ubs.id));
         grid.appendChild(card);
-
     });
 }
 
 function abrirUBS(id) {
 
     const ubs = ubsList.find(function (item) {
-        return item.id === id;
+        return String(item.id) === String(id);
     });
 
     if (!ubs) {
@@ -572,6 +574,7 @@ function abrirUBS(id) {
     }
 
     currentUBS = ubs;
+    sessionStorage.setItem(STORAGE_LAST_UBS, String(ubs.id));
 
     $("detalheNomeUBS").textContent = ubs.nome;
     $("detalheEndereco").textContent = "📍 " + ubs.endereco;
@@ -1105,13 +1108,19 @@ function atualizarDashboard() {
 function iniciarAgendamento() {
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
     if (!paciente) { mostrarApenas("cadastro"); toast("Faça seu cadastro para agendar uma consulta."); return; }
-    if (paciente.ubsId) { abrirUBS(paciente.ubsId); return; }
+    const preferredId = sessionStorage.getItem(STORAGE_LAST_UBS) || paciente.ubsId;
+    const preferred = ubsList.find(ubs => String(ubs.id) === String(preferredId));
+    if (preferred) { abrirUBS(preferred.id); return; }
     renderUBS();
     mostrarApenas("ubsSection");
     atualizarPasso(2);
 }
 
-function mostrarUBSMenu() { iniciarAgendamento(); }
+function mostrarUBSMenu() {
+    renderUBS(true);
+    mostrarApenas("ubsSection");
+    atualizarPasso(2);
+}
 
 function mostrarExames() {
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
@@ -1222,7 +1231,7 @@ async function cancelarConsultaPaciente(id) {
     } catch(error) { toast(error.message); }
 }
 
-function preencherSelectUBSPaciente(){const select=$("ubsPaciente");if(select)select.innerHTML='<option value="">Selecione sua UBS</option>'+ubsList.map(u=>`<option value="${escapeHTML(u.id)}">${escapeHTML(u.nome)}</option>`).join('');}
+function preencherSelectUBSPaciente(){const select=$("ubsPaciente");if(!select)return;const preferred=sessionStorage.getItem(STORAGE_LAST_UBS);select.innerHTML='<option value="">Selecione sua UBS</option>'+ubsList.map(u=>`<option value="${escapeHTML(u.id)}">${escapeHTML(u.nome)}</option>`).join('');if(preferred&&ubsList.some(u=>String(u.id)===String(preferred)))select.value=preferred;select.onchange=()=>{if(select.value)sessionStorage.setItem(STORAGE_LAST_UBS,String(select.value));else sessionStorage.removeItem(STORAGE_LAST_UBS);};}
 function abrirSuporte(){const p=JSON.parse(sessionStorage.getItem(STORAGE_PATIENT)||'null');if(p){$("suporteNome").value=p.nome||'';$("suporteTelefone").value=p.telefone||'';}const clinic=!!window.publicClinicSlug;const title=$("supportModal")?.querySelector('h2');const hint=$("supportModal")?.querySelector('.subtitle');if(title)title.textContent=clinic?'Fale com a clínica':'Como podemos ajudar?';const fabLabel=$("supportFabLabel");if(fabLabel)fabLabel.textContent=clinic?'Fale com a clínica':'Suporte ao paciente';if(hint)hint.textContent=clinic?'Sua solicitação será recebida primeiro pela clínica. Ela poderá responder, resolver ou encaminhar apenas problemas técnicos.':'Envie sua dúvida e guarde o protocolo para acompanhar a resposta.';$("supportModal").classList.remove('hidden');carregarMeuSuporte();}
 function fecharSuporte(){$("supportModal").classList.add('hidden');}
 async function carregarMeuSuporte(){
@@ -1618,6 +1627,28 @@ async function alternarUBSAtiva(){const unit=UBSAdminAtual();if(!unit)return;con
    ============================================================ */
 
 async function carregarListaEsperaUBS(){const box=$("listaEsperaUBS");if(!box||!adminSession)return;try{const d=await api('admin_waitlist',{params:{ubs_id:adminSession.tipo==='ubs'?adminSession.ubsId:$('adminUBSSelect').value}});box.innerHTML=(d.waitlist||[]).length?(d.waitlist||[]).map(w=>`<article class="admin-appointment"><strong>${escapeHTML(w.codigo||'PAC')} — ${escapeHTML(w.nome)}</strong><p>${escapeHTML(w.especialidade)} • ${formatarDataBR(w.data)}</p><small>Entrada: ${escapeHTML(w.criadoEm||'')}</small></article>`).join(''):'<div class="info-box">Nenhum paciente aguardando.</div>';}catch(e){box.innerHTML='<div class="info-box">'+escapeHTML(e.message)+'</div>';}}
+
+async function salvarCampanhasEventos() {
+    const ubs = UBSAdminAtual();
+    const button = $("saveCampaignsEventsButton");
+    const status = $("campaignsEventsStatus");
+    if (!ubs) { toast("Nenhuma UBS selecionada."); return; }
+    if (button) button.disabled = true;
+    try {
+        const campanhas = converterTextoLista($("editCampanhas").value);
+        const data = await api("update_ubs_campaigns", {method:"POST", body:{ubs_id:ubs.id, campanhas}});
+        const i = ubsList.findIndex(item => String(item.id) === String(ubs.id));
+        if (data.ubs && i >= 0) ubsList[i] = data.ubs;
+        if (data.ubs && currentUBS && String(currentUBS.id) === String(ubs.id)) currentUBS = data.ubs;
+        if (status) status.textContent = `Salvo em ${new Date().toLocaleString("pt-BR", {dateStyle:"short", timeStyle:"short"})}`;
+        toast(data.message || "Campanhas e eventos atualizados.");
+    } catch (error) {
+        if (status) status.textContent = `Não foi possível salvar: ${error.message}`;
+        toast(error.message);
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
 
 async function salvarInformacoesUBS() {
 
@@ -2572,7 +2603,12 @@ function aplicarConfiguracaoApp(){
     document.title=(appConfig.nomeExibicao||'Acessa+ Saúde')+' | Agendamento';
     if ($("modoSistemaLabel")) $("modoSistemaLabel").textContent=profissional?'Modo profissional da clínica':'Modo UBS / rede pública';
     if ($("ubsAtualDashboard")) $("ubsAtualDashboard").textContent=profissional?(appConfig.nomeExibicao||'Profissional'):'UBS de referência: Não informada';
-    document.querySelectorAll('.brand img,.hero-logo,.registration-hero-logo').forEach(img=>{if(appConfig.logoArquivo)img.src='uploads/marca/'+appConfig.logoArquivo;});
+    document.querySelectorAll('.brand img,.hero-logo,.registration-hero-logo').forEach(img=>{
+        const fallback=appPath(img.closest('.brand')?'/img/logo-white.png':'/img/logo-transparent.png');
+        img.onerror=()=>{img.onerror=null;img.dataset.customLogo='false';img.src=fallback;};
+        if(appConfig.logoArquivo){img.dataset.customLogo='true';img.src=appPath('/uploads/marca/'+encodeURIComponent(appConfig.logoArquivo));}
+        else img.dataset.customLogo='false';
+    });
 }
 async function carregarConfiguracaoAdmin(){try{const d=await api('get_app_config');const c=d.config||{};['modo','nomeExibicao','especialidade','registroProfissional','telefone','whatsapp','endereco','modalidade','valorConsulta','apresentacao','corPrimaria','corSecundaria'].forEach(k=>{const id={'nomeExibicao':'appNomeExibicao','registroProfissional':'appRegistro','valorConsulta':'appValor','corPrimaria':'appCorPrimaria','corSecundaria':'appCorSecundaria','modo':'appModo','especialidade':'appEspecialidade','telefone':'appTelefone','whatsapp':'appWhatsapp','endereco':'appEndereco','modalidade':'appModalidade','apresentacao':'appApresentacao'}[k];if(id&&$(id))$(id).value=c[k]??'';});}catch(e){toast(e.message);}}
 async function salvarConfiguracaoApp(){const body={modo:$("appModo").value,nome_exibicao:$("appNomeExibicao").value.trim(),especialidade:$("appEspecialidade").value.trim(),registro_profissional:$("appRegistro").value.trim(),telefone:$("appTelefone").value.trim(),whatsapp:$("appWhatsapp").value.trim(),endereco:$("appEndereco").value.trim(),modalidade:$("appModalidade").value.trim(),valor_consulta:$("appValor").value,apresentacao:$("appApresentacao").value.trim(),cor_primaria:$("appCorPrimaria").value,cor_secundaria:$("appCorSecundaria").value};if(!body.nome_exibicao){toast('Informe o nome que será exibido.');return;}try{const d=await api('update_app_config',{method:'POST',body});appConfig=d.config||body;aplicarConfiguracaoApp();toast('Modo e personalização salvos.');}catch(e){toast(e.message);}}
@@ -2606,7 +2642,9 @@ async function carregarClinicaPublica(slug){
         const d=await api('public_clinic',{params:{slug}}),c=d.clinic;window.publicClinicSlug=c.slug;
         document.body.style.setProperty('--clinic-primary',c.corPrimaria||'#0b9f9f');document.body.style.setProperty('--clinic-secondary',c.corSecundaria||'#075e61');document.body.classList.add('clinic-public-active');mostrarApenas('publicClinicSection');atualizarVisibilidadeAcessoAdministrativo();
         $('publicClinicName').textContent=c.nome;$('publicClinicPresentation').textContent=c.apresentacao||'Agende sua consulta na clínica de forma simples.';$('publicClinicDetails').textContent=[c.especialidade,c.modalidade,c.endereco,c.whatsapp||c.telefone,c.horarioFuncionamento?'Horário: '+c.horarioFuncionamento:''].filter(Boolean).join(' • ');
-        const notice=$('publicClinicNotice');if(notice)notice.textContent=c.avisoPublico||'';if(c.logoArquivo)$('publicClinicLogo').src='uploads/marca/'+c.logoArquivo;document.title=c.nome+' | Agendamento';
+        const notice=$('publicClinicNotice');if(notice)notice.textContent=c.avisoPublico||'';
+        const clinicLogo=$('publicClinicLogo');if(clinicLogo){clinicLogo.onerror=()=>{clinicLogo.onerror=null;clinicLogo.src=appPath('/img/logo-transparent.png');};clinicLogo.src=c.logoArquivo?appPath('/uploads/marca/'+encodeURIComponent(c.logoArquivo)):appPath('/img/logo-transparent.png');}
+        document.title=c.nome+' | Agendamento';
         const submit=document.querySelector('.public-clinic-form .btn.primary');if(submit)submit.innerHTML=c.confirmacaoAutomatica?'Agendar consulta <span>→</span>':'Solicitar horário <span>→</span>';
         $('publicPatientDate').min=hojeISO();
         const urlParams=new URLSearchParams(location.search);const token=urlParams.get('gerenciar')||sessionStorage.getItem('acessa_clinic_management_token');
@@ -2675,8 +2713,32 @@ function fecharLoginProfissional(){
     if(back==="/ubs"){document.body.dataset.portal="ubs";history.replaceState({},"",appPath("/ubs"));mostrarApenas("cadastro");}
     else{document.body.dataset.portal="";history.replaceState({},"",appPath("/"));mostrarApenas("portalChooserSection");}
 }
-async function loginProfissional(){const email=$('professionalEmail').value.trim(),senha=$('professionalSenha').value;if(!email||!senha){toast('Informe e-mail e senha.');return;}try{const d=await api('professional_login',{method:'POST',body:{email,senha}});professionalSession=d.professional;fecharLoginProfissional();abrirPortalProfissional('dashboard');}catch(e){toast(e.message);}}
-async function cadastrarProfissional(){const nome=$('professionalNome').value.trim(),email=$('professionalEmail').value.trim(),senha=$('professionalSenha').value;if(!nome||!email||senha.length<8){toast('Informe nome, e-mail e senha com pelo menos 8 caracteres.');return;}try{const d=await api('professional_register',{method:'POST',body:{nome,email,senha,especialidade:$('professionalEspecialidade').value.trim()}});professionalSession=d.professional;fecharLoginProfissional();toast(d.message||'Conta profissional criada.');abrirPortalProfissional('dashboard');}catch(e){toast(e.message);}}
+async function loginProfissional(){
+    const email=$('professionalEmail').value.trim(),senha=$('professionalSenha').value;
+    if(!email||!senha){toast('Informe e-mail e senha.');return;}
+    const button=$('professionalLoginButton'),original=button?.innerHTML;
+    if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Entrando…';}
+    try{const d=await api('professional_login',{method:'POST',body:{email,senha}});professionalSession=d.professional;fecharLoginProfissional();abrirPortalProfissional('dashboard');}
+    catch(e){toast(e.message);}
+    finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');button.innerHTML=original;}}
+}
+async function cadastrarProfissional(){
+    const nome=$('professionalNome').value.trim(),email=$('professionalEmail').value.trim(),senha=$('professionalSenha').value;
+    if(nome.length<2){toast('Informe o nome profissional ou da clínica.');$('professionalNome').focus();return;}
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Informe um e-mail válido.');$('professionalEmail').focus();return;}
+    if(senha.length<8){toast('A senha precisa ter pelo menos 8 caracteres.');$('professionalSenha').focus();return;}
+    const button=$('professionalSignupButton'),original=button?.innerHTML;
+    if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Criando cadastro…';}
+    try{
+        const d=await api('professional_register',{method:'POST',body:{nome,email,senha,especialidade:$('professionalEspecialidade').value.trim()}});
+        professionalSession=d.professional;
+        fecharLoginProfissional();
+        await carregarPerfilProfissional();
+        abrirPortalProfissional('dashboard');
+        toast(d.message||'Conta profissional criada. Complete os dados e configure o expediente em Minha marca.');
+    }catch(e){toast(e.message);}
+    finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');button.innerHTML=original;}}
+}
 async function solicitarRecuperacaoSenha(){const email=$('professionalEmail').value.trim()||prompt('Informe o e-mail profissional cadastrado:');if(!email)return;try{const d=await api('professional_request_password_reset',{method:'POST',body:{email}});toast(d.message);}catch(e){toast(e.message);}}
 
 function fecharRedefinicaoSenha(){$('professionalResetModal').classList.add('hidden');}
@@ -2688,7 +2750,7 @@ async function sairProfissional(){
     if(document.body.dataset.portal==="clinica"){abrirLoginProfissional();toast('Sessão da clínica encerrada.');return;}
     fecharLoginProfissional();voltarEntradaPortais();toast('Sessão da clínica encerrada.');
 }
-async function abrirPortalProfissional(tab='dashboard'){document.body.classList.remove('clinic-login-route');if(!professionalSession){abrirLoginProfissional();return;}if($("adminTopEntry")){ $("adminTopEntry").classList.add("hidden"); $("adminTopEntry").style.display="none"; }mostrarApenas('professionalSection');document.querySelectorAll('.professional-tab').forEach(x=>x.classList.add('hidden'));const id='prof'+tab.charAt(0).toUpperCase()+tab.slice(1);if($(id))$(id).classList.remove('hidden');$('professionalNomeTopo').textContent=professionalSession.nome||'profissional';if(tab==='dashboard'||tab==='pacientes'||tab==='agenda'||tab==='financeiro'||tab==='relacionamento')carregarPortalProfissional();if(tab==='relacionamento')setTimeout(carregarRelacionamentoProfissional,50);if(tab==='financeiro')setTimeout(carregarFinanceiroProfissional,50);if(tab==='marca')carregarPerfilProfissional();if(tab==='assinatura')carregarPlanosProfissional();if(tab==='agenda')setTimeout(carregarListaEsperaProfissional,50);if(tab==='waitlist')carregarListaEsperaProfissional();if(tab==='suporte')carregarSuporteClinica();}
+async function abrirPortalProfissional(tab='dashboard'){document.body.classList.remove('clinic-login-route');if(!professionalSession){abrirLoginProfissional();return;}if($("adminTopEntry")){ $("adminTopEntry").classList.add("hidden"); $("adminTopEntry").style.display="none"; }mostrarApenas('professionalSection');document.querySelectorAll('.professional-tab').forEach(x=>x.classList.add('hidden'));const id='prof'+tab.charAt(0).toUpperCase()+tab.slice(1);if($(id))$(id).classList.remove('hidden');$('professionalNomeTopo').textContent=professionalSession.nome||'profissional';if(tab==='dashboard'||tab==='pacientes'||tab==='agenda'||tab==='financeiro'||tab==='relacionamento')carregarPortalProfissional();if(tab==='relacionamento')setTimeout(carregarRelacionamentoProfissional,50);if(tab==='financeiro')setTimeout(carregarFinanceiroProfissional,50);if(tab==='marca')carregarPerfilProfissional();if(tab==='assinatura')carregarPlanosProfissional();if(tab==='agenda'&&typeof window.carregarListaEsperaProfissional==='function')setTimeout(window.carregarListaEsperaProfissional,50);if(tab==='waitlist'&&typeof window.carregarListaEsperaProfissional==='function')window.carregarListaEsperaProfissional();if(tab==='suporte')carregarSuporteClinica();}
 async function carregarPortalProfissional(){
     const calendarBox=$('professionalCalendar');
     const patientsBox=$('profPatientsList');
@@ -2855,7 +2917,31 @@ async function copiarLinkPublicoClinica() {
     }
 }
 
-async function carregarPerfilProfissional(){try{const d=await api('professional_me'),p=d.professional||{};const map={nome:'profSetNome',cnpj:'profSetCnpj',especialidade:'profSetEspecialidade',registroProfissional:'profSetRegistro',telefone:'profSetTelefone',whatsapp:'profSetWhatsapp',modalidade:'profSetModalidade',horarioFuncionamento:'profSetHorario',valorConsulta:'profSetValor',endereco:'profSetEndereco',apresentacao:'profSetApresentacao',avisoPublico:'profSetAviso',mensagemPosVenda:'relMensagemPadrao',corPrimaria:'profSetCor',limiteDiario:'profSetLimiteDiario'};Object.entries(map).forEach(([k,id])=>{if($(id))$(id).value=p[k]??'';});$('profSetAutoConfirm').value=String(Number(p.confirmacaoAutomatica??1));$('profCancelHours').value=Number(p.cancelamentoAteHoras??24);$('profRescheduleHours').value=Number(p.remarcacaoAteHoras??24);professionalSession={...professionalSession,nome:p.nome,slug:p.slug};atualizarLinkPublicoClinica(p.slug);await carregarAgendaSemanal();}catch(e){toast(e.message);}}
+function definirPreviewLogoProfissional(src){
+    const preview=$('profLogoPreview');if(!preview)return;
+    preview.onerror=()=>{preview.onerror=null;preview.src=appPath('/img/logo-transparent.png');};
+    preview.src=src||appPath('/img/logo-transparent.png');
+}
+function previewProfessionalLogo(input){
+    const file=input?.files?.[0];if(!file){definirPreviewLogoProfissional(appPath('/img/logo-transparent.png'));return;}
+    if(file.size>5*1024*1024){toast('A logo deve ter no máximo 5 MB.');input.value='';return;}
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)){toast('Use uma imagem PNG, JPG ou WEBP.');input.value='';return;}
+    const reader=new FileReader();reader.onload=()=>definirPreviewLogoProfissional(String(reader.result||''));reader.readAsDataURL(file);
+}
+async function carregarPerfilProfissional(){
+    try{
+        const d=await api('professional_me'),p=d.professional||{};
+        const map={nome:'profSetNome',cnpj:'profSetCnpj',especialidade:'profSetEspecialidade',registroProfissional:'profSetRegistro',telefone:'profSetTelefone',whatsapp:'profSetWhatsapp',modalidade:'profSetModalidade',horarioFuncionamento:'profSetHorario',valorConsulta:'profSetValor',endereco:'profSetEndereco',apresentacao:'profSetApresentacao',avisoPublico:'profSetAviso',mensagemPosVenda:'relMensagemPadrao',corPrimaria:'profSetCor',limiteDiario:'profSetLimiteDiario'};
+        Object.entries(map).forEach(([k,id])=>{if($(id))$(id).value=p[k]??'';});
+        $('profSetAutoConfirm').value=String(Number(p.confirmacaoAutomatica??1));
+        $('profCancelHours').value=Number(p.cancelamentoAteHoras??24);
+        $('profRescheduleHours').value=Number(p.remarcacaoAteHoras??24);
+        professionalSession={...professionalSession,nome:p.nome,slug:p.slug};
+        atualizarLinkPublicoClinica(p.slug);
+        definirPreviewLogoProfissional(p.logoArquivo?appPath('/uploads/marca/'+encodeURIComponent(p.logoArquivo)):appPath('/img/logo-transparent.png'));
+        await carregarAgendaSemanal();
+    }catch(e){toast(e.message);}
+}
 const diasAgendaProfissional=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 function desenharAgendaSemanal(rows=[]){
     const box=$('professionalScheduleEditor');
@@ -2885,6 +2971,14 @@ function desenharAgendaSemanal(rows=[]){
             </article>`;
         }).join('')}</div>
     </div>`;
+    atualizarResumoAgendaSemanal();
+}
+function atualizarResumoAgendaSemanal(){
+    const box=$("professionalScheduleEditor"),summary=$("professionalScheduleStatus");
+    if(!box||!summary)return;
+    const active=[...box.querySelectorAll("[data-schedule-active]")].filter(input=>input.checked).length;
+    summary.textContent=active?`Expediente habilitado em ${active} de 7 dias. Salve as alterações para atualizar os horários públicos.`:"Nenhum dia está ativo. Ative ao menos um dia para liberar horários no link público.";
+    summary.classList.toggle("is-empty",active===0);
 }
 function selecionarDiaExpediente(day){
     const box=$('professionalScheduleEditor');if(!box)return;
@@ -2897,8 +2991,9 @@ function alternarDiaExpediente(day,active){
     const status=panel.querySelector(`[data-schedule-state="${day}"]`);if(status)status.textContent=active?'Atende neste dia':'Dia fechado';
     panel.querySelectorAll('[data-schedule-field]').forEach(field=>{field.disabled=!active;});
     const tab=box.querySelector(`[data-schedule-tab="${day}"]`);if(tab)tab.classList.toggle('is-open',active);
+    atualizarResumoAgendaSemanal();
 }
-async function carregarAgendaSemanal(){try{const d=await api('professional_schedule');desenharAgendaSemanal(d.schedule||[]);}catch(e){toast(e.message);}}
+async function carregarAgendaSemanal(){try{const d=await api('professional_schedule');desenharAgendaSemanal(d.schedule||[]);}catch(e){const box=$('professionalScheduleEditor'),status=$('professionalScheduleStatus');if(box)box.innerHTML='<div class="info-box">Não foi possível carregar o expediente. Tente novamente antes de editar.</div>';if(status)status.textContent='Expediente indisponível; não salve uma grade vazia.';toast(e.message);}}
 function dadosAgendaSemanal(){
     const box=$('professionalScheduleEditor');
     if(!box)throw new Error('Abra “Minha marca” e aguarde a grade semanal carregar.');
@@ -2936,7 +3031,24 @@ async function salvarAgendaSemanal(){
     }catch(e){toast(e.message);}
     finally{if(button)button.disabled=false;}
 }
-async function salvarPerfilProfissional(){const body={nome:$('profSetNome').value.trim(),cnpj:$('profSetCnpj').value.trim(),especialidade:$('profSetEspecialidade').value.trim(),registro_profissional:$('profSetRegistro').value.trim(),telefone:$('profSetTelefone').value.trim(),whatsapp:$('profSetWhatsapp').value.trim(),modalidade:$('profSetModalidade').value.trim(),horario_funcionamento:$('profSetHorario').value.trim(),valor_consulta:$('profSetValor').value,endereco:$('profSetEndereco').value.trim(),apresentacao:$('profSetApresentacao').value.trim(),aviso_publico:$('profSetAviso').value.trim(),mensagem_pos_venda:mensagemPosVenda,cor_primaria:$('profSetCor').value,limite_diario:Number($('profSetLimiteDiario')?.value||12),confirmacao_automatica:Number($('profSetAutoConfirm').value),cancelamento_ate_horas:Number($('profCancelHours').value||0),remarcacao_ate_horas:Number($('profRescheduleHours').value||0)};try{const d=await api('professional_update_settings',{method:'POST',body});professionalSession.nome=d.professional.nome;const file=$('profLogoFile').files[0];if(file){const form=new FormData();form.append('logo',file);await api('professional_upload_logo',{method:'POST',body:form});}atualizarLinkPublicoClinica(d.professional.slug||professionalSession?.slug);toast('Perfil e regras da clínica salvos.');}catch(e){toast(e.message);}}
+async function salvarPerfilProfissional(){
+    const button=$('saveProfessionalProfileButton'),original=button?.textContent;
+    const body={nome:$('profSetNome').value.trim(),cnpj:$('profSetCnpj').value.trim(),especialidade:$('profSetEspecialidade').value.trim(),registro_profissional:$('profSetRegistro').value.trim(),telefone:$('profSetTelefone').value.trim(),whatsapp:$('profSetWhatsapp').value.trim(),modalidade:$('profSetModalidade').value.trim(),horario_funcionamento:$('profSetHorario').value.trim(),valor_consulta:$('profSetValor').value,endereco:$('profSetEndereco').value.trim(),apresentacao:$('profSetApresentacao').value.trim(),aviso_publico:$('profSetAviso').value.trim(),mensagem_pos_venda:mensagemPosVenda,cor_primaria:$('profSetCor').value,limite_diario:Number($('profSetLimiteDiario')?.value||12),confirmacao_automatica:Number($('profSetAutoConfirm').value),cancelamento_ate_horas:Number($('profCancelHours').value||0),remarcacao_ate_horas:Number($('profRescheduleHours').value||0)};
+    if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Salvando…';}
+    try{
+        const d=await api('professional_update_settings',{method:'POST',body});
+        professionalSession={...professionalSession,...d.professional};
+        atualizarLinkPublicoClinica(d.professional.slug||professionalSession?.slug);
+        const file=$('profLogoFile')?.files?.[0];
+        if(file){
+            const form=new FormData();form.append('logo',file);
+            try{const upload=await api('professional_upload_logo',{method:'POST',body:form});definirPreviewLogoProfissional(upload.url?appPath('/'+upload.url.replace(/^\/+/,'')):appPath('/img/logo-transparent.png'));$('profLogoFile').value='';}
+            catch(uploadError){toast(`Perfil salvo. A logo não foi enviada: ${uploadError.message}`);return;}
+        }
+        toast('Minha marca salva. O expediente é salvo separadamente no bloco semanal.');
+    }catch(e){toast(e.message);}
+    finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');button.textContent=original||'Salvar minha marca';}}
+}
 let planoPagamentoSelecionado=null;
 let agendaMesAtual=new Date();
 let agendaDiaAtual=null;

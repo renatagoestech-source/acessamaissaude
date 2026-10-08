@@ -221,6 +221,9 @@ try {
         case 'update_ubs':
             update_ubs($pdo, body_json());
             break;
+        case 'update_ubs_campaigns':
+            update_ubs_campaigns($pdo, body_json());
+            break;
 
         case 'save_employee':
             save_employee($pdo, body_json());
@@ -1468,6 +1471,29 @@ function audit_event(PDO $pdo, string $acao, ?string $entidade = null, ?string $
         $stmt->execute([$session['id'] ?? null, $session['tipo'] ?? null, $acao, $entidade, $entidadeId, $detalhes ? json_encode($detalhes, JSON_UNESCAPED_UNICODE) : null, $_SERVER['REMOTE_ADDR'] ?? null]);
     } catch (Throwable $ignored) {
         error_log('Falha ao gravar auditoria: '.$ignored->getMessage());
+    }
+}
+
+function update_ubs_campaigns(PDO $pdo, array $data): never
+{
+    $ubsId = required_string($data, 'ubs_id');
+    authorize_ubs($ubsId);
+    $campaigns = clean_list($data['campanhas'] ?? []);
+
+    $pdo->beginTransaction();
+    try {
+        replace_list($pdo, 'ubs_campanhas', $ubsId, $campaigns);
+        $pdo->commit();
+        json_response([
+            'success' => true,
+            'message' => 'Campanhas e eventos atualizados.',
+            'ubs' => get_ubs($pdo, $ubsId, true)
+        ]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
     }
 }
 
