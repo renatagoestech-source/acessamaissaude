@@ -495,7 +495,7 @@ function enforce_professional_patient_limit(PDO $pdo,int $professionalId,int $pa
 }
 function professional_link_patient(PDO $pdo,array $data): never {
     require_professional();
-    json_response(['success'=>false,'message'=>'Vínculo por Cartão SUS foi desativado para não misturar dados da rede pública com prontuários particulares. Cadastre o paciente no consultório ou use o link público da clínica.'],410);
+    json_response(['success'=>false,'message'=>'Esse tipo de vínculo não está disponível. Cadastre o paciente na clínica ou use o link público de agendamento.'],410);
 }
 
 

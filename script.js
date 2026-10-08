@@ -15,7 +15,7 @@ function appPath(path) {
    CONFIGURAÇÕES
    ============================================================ */
 
-const API_URL = "api.php";
+const API_URL = appPath("/api.php");
 const STORAGE_PATIENT = "acessaMaisSaude_patient_v1";
 const CPF_STORAGE_KEY = 'acessaMaisSaude_cpf_v1';
 
@@ -109,6 +109,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     } else if (databaseReady && portal === "clinica") {
         definirModoUsuario(false);
         window.clinicLoginReturnPath = "/clinica";
+        mostrarApenas("portalChooserSection");
         abrirLoginProfissional();
     } else if (pacienteSalvo && databaseReady) {
         definirModoUsuario(true);
@@ -130,10 +131,31 @@ document.addEventListener("DOMContentLoaded", async function () {
 
 });
 
+async function respostaJson(response, action) {
+    const raw = await response.text();
+    let data = null;
+    try {
+        data = raw ? JSON.parse(raw) : null;
+    } catch (_error) {
+        data = null;
+    }
+    if (data && typeof data === "object" && !Array.isArray(data)) return data;
+
+    const contentType = response.headers.get("content-type") || "tipo não informado";
+    const requestId = response.headers.get("x-vercel-id") || response.headers.get("x-request-id") || "";
+    const reference = requestId ? ` Referência: ${requestId}.` : "";
+    const message = response.status >= 500
+        ? `Falha no servidor ao executar “${action}” (HTTP ${response.status}). Tente novamente e, se persistir, informe o horário.${reference}`
+        : `A API respondeu em formato inesperado para “${action}” (HTTP ${response.status}; ${contentType}). Recarregue a página e tente novamente.${reference}`;
+    const error = new Error(message);
+    error.data = { success: false, code: "INVALID_JSON_RESPONSE", action, httpStatus: response.status, contentType, requestId };
+    throw error;
+}
+
 async function obterTokenCSRF() {
     if (csrfToken) return csrfToken;
-    const response = await fetch(`${API_URL}?action=csrf_token`, { credentials: "same-origin", cache: "no-store" });
-    const data = await response.json().catch(() => ({}));
+    const response = await fetch(`${API_URL}?action=csrf_token`, { credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" } });
+    const data = await respostaJson(response, "csrf_token");
     if (!response.ok || !data.csrf_token) throw new Error(data.message || "Não foi possível validar a sessão.");
     csrfToken = data.csrf_token;
     return csrfToken;
@@ -158,8 +180,10 @@ async function api(action, options = {}) {
         config.headers["Content-Type"] = "application/json";
         config.body = JSON.stringify(config.body);
     }
+    config.headers.Accept = "application/json";
+    config.cache = "no-store";
     const response = await fetch(`${API_URL}?${query.toString()}`, config);
-    const data = await response.json().catch(() => ({ success: false, message: "Resposta inválida do servidor." }));
+    const data = await respostaJson(response, action);
     if (response.status === 419 && csrfRequired && !retriedCsrf) {
         csrfToken = typeof data.csrf_token === "string" && data.csrf_token ? data.csrf_token : null;
         return api(action, { ...options, __retryCsrf: true });
@@ -777,6 +801,7 @@ function renderCalendario() {
         const dataISO = formatarData(data);
 
         if (
+            dataISO < hojeISO() ||
             data.getDay() === 0 ||
             data.getDay() === 6 ||
             ehFeriado(data)
@@ -816,37 +841,23 @@ function selecionarData(data) {
     atualizarPasso(4);
 }
 
-function mesAnterior() {
-
+function mudarMesCalendario(delta) {
+    const proximoMes = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + delta, 1);
     const hoje = new Date();
+    const primeiroMesDisponivel = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    if (proximoMes < primeiroMesDisponivel) return;
 
-    const mesAtualReal =
-        hoje.getFullYear() * 12 +
-        hoje.getMonth();
-
-    const mesSelecionado =
-        calendarDate.getFullYear() * 12 +
-        calendarDate.getMonth();
-
-    if (mesSelecionado <= mesAtualReal) {
-        return;
+    calendarDate = proximoMes;
+    if (currentDate && currentDate.slice(0, 7) !== formatarData(calendarDate).slice(0, 7)) {
+        currentDate = null;
+        currentTime = null;
+        void renderHorarios();
     }
-
-    calendarDate.setMonth(
-        calendarDate.getMonth() - 1
-    );
-
     renderCalendario();
 }
 
-function mesProximo() {
-
-    calendarDate.setMonth(
-        calendarDate.getMonth() + 1
-    );
-
-    renderCalendario();
-}
+function mesAnterior() { mudarMesCalendario(-1); }
+function mesProximo() { mudarMesCalendario(1); }
 
 function formatarData(data) {
 
@@ -2678,7 +2689,7 @@ function statusConsultaLabel(s){return ({solicitada:'Solicitada',agendada:'Agend
 function escapeAttr(v){return escapeHTML(v).replaceAll('`','&#096;');}
 function renderAppointmentsProfissional(list){const box=$('profAppointmentsList');if(!box)return;const selected=agendaDiaAtual;const filtered=selected?list.filter(a=>a.data===selected):list;box.innerHTML=filtered.length?filtered.map(a=>{const status=a.status||'confirmada';return `<article class="admin-appointment clinic-appointment status-${escapeAttr(status)}"><div class="appointment-topline"><strong>${escapeHTML(a.paciente)}</strong><span class="status confirmado">${statusConsultaLabel(status)}</span></div><p>${escapeHTML(formatarDataBR(a.data))} às ${escapeHTML(a.horario)} • ${escapeHTML(a.telefone||'')}</p><p>${escapeHTML(a.assunto||'Sem assunto')}</p><p class="notification-planned">${status==='solicitada'?'Aguardando confirmação da clínica':'Confirmação registrada'}</p><div class="appointment-actions">${status==='solicitada'?`<button class="btn primary" onclick="confirmarSolicitacaoClinica('${escapeAttr(a.id)}')">Confirmar solicitação</button>`:''}<button class="btn secondary" onclick="reagendarConsulta('${escapeAttr(a.id)}','${escapeAttr(a.data)}','${escapeAttr(a.horario)}')">Reagendar</button><button class="btn danger" onclick="cancelarConsultaProfissional('${escapeAttr(a.id)}')">Cancelar</button><button class="btn secondary" onclick="enviarConfirmacaoWhatsApp('${escapeAttr(a.id)}')">Confirmação WhatsApp</button></div></article>`;}).join(''):'<div class="info-box">Nenhuma consulta para este dia.</div>';window.professionalAppointments=list;}
 function renderCalendarioProfissional(list){const box=$('professionalCalendar');if(!box)return;const y=agendaMesAtual.getFullYear(),m=agendaMesAtual.getMonth(),first=new Date(y,m,1),last=new Date(y,m+1,0),days=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];$('agendaMesTitulo').textContent=first.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});let html=days.map(d=>`<div class="calendar-weekday">${d}</div>`).join('');for(let i=0;i<first.getDay();i++)html+='<div class="calendar-cell empty"></div>';for(let d=1;d<=last.getDate();d++){const iso=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;const events=list.filter(a=>a.data===iso);const cls=events.some(a=>a.status==='cancelada')?'has-canceled':events.length?'has-confirmed':'';html+=`<button class="calendar-cell ${cls} ${agendaDiaAtual===iso?'selected':''}" onclick="selecionarDiaAgenda('${iso}')"><b>${d}</b><span>${events.length?events.length+' consulta'+(events.length>1?'s':''):''}</span>${events.slice(0,3).map(a=>`<i class="calendar-event ${a.status==='atendida'?'attended':a.status==='cancelada'?'canceled':'confirmed'}">${escapeHTML((a.horario||'').slice(0,5))} ${escapeHTML(a.paciente||'')}</i>`).join('')}</button>`;}box.innerHTML=html;const info=$('agendaDiaSelecionado');if(info)info.innerHTML=agendaDiaAtual?`<strong>Dia selecionado:</strong> ${formatarDataBR(agendaDiaAtual)}. Clique em uma data para ver as consultas.`:'<strong>Selecione um dia</strong> para filtrar as consultas abaixo.';}
-function mudarMesAgenda(delta){agendaMesAtual.setMonth(agendaMesAtual.getMonth()+delta);renderCalendarioProfissional(window.professionalAppointments||[]);renderAppointmentsProfissional(window.professionalAppointments||[]);}
+function mudarMesAgenda(delta){agendaMesAtual=new Date(agendaMesAtual.getFullYear(),agendaMesAtual.getMonth()+delta,1);agendaDiaAtual=null;renderCalendarioProfissional(window.professionalAppointments||[]);renderAppointmentsProfissional(window.professionalAppointments||[]);}
 function selecionarDiaAgenda(iso){agendaDiaAtual=agendaDiaAtual===iso?null:iso;const a=window.professionalAppointments||[];renderCalendarioProfissional(a);renderAppointmentsProfissional(a);if($('profAgendaData')&&iso)$('profAgendaData').value=iso;}
 
 async function confirmarSolicitacaoClinica(id){const a=(window.professionalAppointments||[]).find(x=>x.id===id);if(!a)return;try{await api('professional_update_appointment',{method:'POST',body:{id,status:'confirmada',data_consulta:a.data,horario:a.horario}});toast('Consulta confirmada; aviso enviado ao paciente quando o e-mail está configurado.');await carregarAgendaProfissional();}catch(e){toast(e.message);}}
@@ -2747,7 +2758,36 @@ function preencherSelectsProfissional(){['profAgendaPaciente'].forEach(id=>{cons
 async function vincularPacienteProfissional(){const sus=$('profPatientSus').value.trim();if(!sus){toast('Informe o Cartão SUS.');return;}try{await api('professional_link_patient',{method:'POST',body:{sus}});$('profPatientSus').value='';toast('Paciente vinculado.');carregarPortalProfissional();}catch(e){toast(e.message);}}
 async function criarConsultaProfissional(){const body={patient_id:Number($('profAgendaPaciente').value),data_consulta:$('profAgendaData').value,horario:$('profAgendaHorario').value,assunto:$('profAgendaAssunto').value.trim()};if(!body.patient_id||!body.data_consulta||!body.horario){toast('Informe paciente, data e horário.');return;}try{await api('professional_create_appointment',{method:'POST',body});toast('Consulta confirmada e adicionada ao calendário.');$('profAgendaAssunto').value='';carregarPortalProfissional();}catch(e){toast(e.message);}}
 async function carregarAgendaProfissional(){await carregarPortalProfissional();}
-async function carregarPerfilProfissional(){try{const d=await api('professional_me'),p=d.professional||{};const map={nome:'profSetNome',cnpj:'profSetCnpj',especialidade:'profSetEspecialidade',registroProfissional:'profSetRegistro',telefone:'profSetTelefone',whatsapp:'profSetWhatsapp',modalidade:'profSetModalidade',horarioFuncionamento:'profSetHorario',valorConsulta:'profSetValor',endereco:'profSetEndereco',apresentacao:'profSetApresentacao',avisoPublico:'profSetAviso',mensagemPosVenda:'relMensagemPadrao',corPrimaria:'profSetCor',limiteDiario:'profSetLimiteDiario'};Object.entries(map).forEach(([k,id])=>{if($(id))$(id).value=p[k]??'';});$('profSetAutoConfirm').value=String(Number(p.confirmacaoAutomatica??1));$('profCancelHours').value=Number(p.cancelamentoAteHoras??24);$('profRescheduleHours').value=Number(p.remarcacaoAteHoras??24);professionalSession={...professionalSession,nome:p.nome,slug:p.slug};const link=$('profPublicLink');if(link&&p.slug){link.href=location.origin+location.pathname+'?clinica='+encodeURIComponent(p.slug);link.textContent=link.href;}await carregarAgendaSemanal();}catch(e){toast(e.message);}}
+function atualizarLinkPublicoClinica(slug) {
+    const publicLink = $("profPublicLink");
+    const previewLink = $("profPublicLinkOpen");
+    const copyButton = $("copyPublicClinicLinkButton");
+    if (!slug) {
+        if (publicLink) { publicLink.href = "#"; publicLink.textContent = "Link público indisponível"; delete publicLink.dataset.url; }
+        if (previewLink) { previewLink.href = "#"; previewLink.setAttribute("aria-disabled", "true"); }
+        if (copyButton) copyButton.disabled = true;
+        return;
+    }
+    const url = new URL(appPath("/clinica"), location.origin);
+    url.searchParams.set("clinica", slug);
+    const href = url.toString();
+    if (publicLink) { publicLink.href = href; publicLink.textContent = href; publicLink.dataset.url = href; }
+    if (previewLink) { previewLink.href = href; previewLink.removeAttribute("aria-disabled"); }
+    if (copyButton) copyButton.disabled = false;
+}
+
+async function copiarLinkPublicoClinica() {
+    const url = $("profPublicLink")?.dataset.url;
+    if (!url) { toast("O link público ainda não está disponível."); return; }
+    try {
+        await navigator.clipboard.writeText(url);
+        toast("Link público copiado. Envie-o aos seus pacientes.");
+    } catch (_error) {
+        window.prompt("Copie e envie este link aos seus pacientes:", url);
+    }
+}
+
+async function carregarPerfilProfissional(){try{const d=await api('professional_me'),p=d.professional||{};const map={nome:'profSetNome',cnpj:'profSetCnpj',especialidade:'profSetEspecialidade',registroProfissional:'profSetRegistro',telefone:'profSetTelefone',whatsapp:'profSetWhatsapp',modalidade:'profSetModalidade',horarioFuncionamento:'profSetHorario',valorConsulta:'profSetValor',endereco:'profSetEndereco',apresentacao:'profSetApresentacao',avisoPublico:'profSetAviso',mensagemPosVenda:'relMensagemPadrao',corPrimaria:'profSetCor',limiteDiario:'profSetLimiteDiario'};Object.entries(map).forEach(([k,id])=>{if($(id))$(id).value=p[k]??'';});$('profSetAutoConfirm').value=String(Number(p.confirmacaoAutomatica??1));$('profCancelHours').value=Number(p.cancelamentoAteHoras??24);$('profRescheduleHours').value=Number(p.remarcacaoAteHoras??24);professionalSession={...professionalSession,nome:p.nome,slug:p.slug};atualizarLinkPublicoClinica(p.slug);await carregarAgendaSemanal();}catch(e){toast(e.message);}}
 const diasAgendaProfissional=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 function desenharAgendaSemanal(rows=[]){
     const box=$('professionalScheduleEditor');
@@ -2815,7 +2855,7 @@ function validarAgendaSemanal(rows){
     }
 }
 async function salvarAgendaSemanal(){const button=$('saveProfessionalScheduleButton');if(button)button.disabled=true;try{const dias=dadosAgendaSemanal();validarAgendaSemanal(dias);const d=await api('professional_save_schedule',{method:'POST',body:{dias}});desenharAgendaSemanal(d.schedule||[]);toast('Expediente, duração e pausas salvos.');}catch(e){toast(e.message);}finally{if(button)button.disabled=false;}}
-async function salvarPerfilProfissional(){const body={nome:$('profSetNome').value.trim(),cnpj:$('profSetCnpj').value.trim(),especialidade:$('profSetEspecialidade').value.trim(),registro_profissional:$('profSetRegistro').value.trim(),telefone:$('profSetTelefone').value.trim(),whatsapp:$('profSetWhatsapp').value.trim(),modalidade:$('profSetModalidade').value.trim(),horario_funcionamento:$('profSetHorario').value.trim(),valor_consulta:$('profSetValor').value,endereco:$('profSetEndereco').value.trim(),apresentacao:$('profSetApresentacao').value.trim(),aviso_publico:$('profSetAviso').value.trim(),mensagem_pos_venda:mensagemPosVenda,cor_primaria:$('profSetCor').value,limite_diario:Number($('profSetLimiteDiario')?.value||12),confirmacao_automatica:Number($('profSetAutoConfirm').value),cancelamento_ate_horas:Number($('profCancelHours').value||0),remarcacao_ate_horas:Number($('profRescheduleHours').value||0)};try{const d=await api('professional_update_settings',{method:'POST',body});professionalSession.nome=d.professional.nome;const file=$('profLogoFile').files[0];if(file){const form=new FormData();form.append('logo',file);await api('professional_upload_logo',{method:'POST',body:form});}const link=$('profPublicLink');if(link&&d.professional.slug){link.href=location.origin+location.pathname+'?clinica='+encodeURIComponent(d.professional.slug);link.textContent=link.href;}toast('Perfil e regras da clínica salvos.');}catch(e){toast(e.message);}}
+async function salvarPerfilProfissional(){const body={nome:$('profSetNome').value.trim(),cnpj:$('profSetCnpj').value.trim(),especialidade:$('profSetEspecialidade').value.trim(),registro_profissional:$('profSetRegistro').value.trim(),telefone:$('profSetTelefone').value.trim(),whatsapp:$('profSetWhatsapp').value.trim(),modalidade:$('profSetModalidade').value.trim(),horario_funcionamento:$('profSetHorario').value.trim(),valor_consulta:$('profSetValor').value,endereco:$('profSetEndereco').value.trim(),apresentacao:$('profSetApresentacao').value.trim(),aviso_publico:$('profSetAviso').value.trim(),mensagem_pos_venda:mensagemPosVenda,cor_primaria:$('profSetCor').value,limite_diario:Number($('profSetLimiteDiario')?.value||12),confirmacao_automatica:Number($('profSetAutoConfirm').value),cancelamento_ate_horas:Number($('profCancelHours').value||0),remarcacao_ate_horas:Number($('profRescheduleHours').value||0)};try{const d=await api('professional_update_settings',{method:'POST',body});professionalSession.nome=d.professional.nome;const file=$('profLogoFile').files[0];if(file){const form=new FormData();form.append('logo',file);await api('professional_upload_logo',{method:'POST',body:form});}atualizarLinkPublicoClinica(d.professional.slug||professionalSession?.slug);toast('Perfil e regras da clínica salvos.');}catch(e){toast(e.message);}}
 let planoPagamentoSelecionado=null;
 let agendaMesAtual=new Date();
 let agendaDiaAtual=null;
