@@ -368,7 +368,7 @@ function atualizarVisibilidadeAcessoAdministrativo(forceHome = false) {
 }
 
 function mostrarApenas(id) {
-    const secoes = ["cadastro","databaseSetupSection","perfilSection","dashboardSection","ubsSection","ubsDetalhes","especialidadeSection","agendaSection","confirmacaoSection","meusAgendamentos","examesSection","avisosSection","ajudaSection","professionalSection","portalChooserSection","publicClinicSection"];
+    const secoes = ["cadastro","appLoadingSection","databaseSetupSection","perfilSection","dashboardSection","ubsSection","ubsDetalhes","especialidadeSection","agendaSection","confirmacaoSection","meusAgendamentos","examesSection","avisosSection","ajudaSection","professionalSection","portalChooserSection","publicClinicSection"];
     secoes.forEach(function(secao){ const elemento=$(secao); if(elemento) elemento.classList.add("hidden"); });
     const alvo=$(id); if(alvo) alvo.classList.remove("hidden");
     atualizarVisibilidadeAcessoAdministrativo();
@@ -2613,7 +2613,16 @@ async function carregarClinicaPublica(slug){
         history.replaceState({},'',location.pathname+'?clinica='+encodeURIComponent(c.slug));
         await carregarHorariosDisponiveis();
         if(token){clinicManagementToken=token;sessionStorage.setItem('acessa_clinic_management_token',token);await carregarGerenciamentoClinica(token);}
-    }catch(e){toast(e.message);mostrarApenas('portalChooserSection');}
+    }catch(e){
+        const title=$('appLoadingTitle');
+        const message=$('appLoadingMessage');
+        if(title)title.textContent='Não foi possível abrir esta clínica';
+        if(message)message.textContent='Verifique o link público e tente novamente. Se o problema continuar, fale com a clínica.';
+        const loading=$('appLoadingSection');
+        if(loading)loading.setAttribute('aria-busy','false');
+        mostrarApenas('appLoadingSection');
+        toast(e.message||'Não foi possível carregar a clínica.');
+    }
 }
 async function carregarHorariosDisponiveis(){
     const date=$('publicPatientDate')?.value,select=$('publicPatientTime'),help=$('publicSlotsHelp');if(!select)return;
@@ -2913,7 +2922,20 @@ function validarAgendaSemanal(rows){
         if(row.pausa_inicio&&(row.pausa_inicio>=row.pausa_fim||row.pausa_inicio<row.inicio||row.pausa_fim>row.fim))throw new Error(`A pausa de ${diasAgendaProfissional[row.dia]} deve ficar dentro do expediente.`);
     }
 }
-async function salvarAgendaSemanal(){const button=$('saveProfessionalScheduleButton');if(button)button.disabled=true;try{const dias=dadosAgendaSemanal();validarAgendaSemanal(dias);const d=await api('professional_save_schedule',{method:'POST',body:{dias}});desenharAgendaSemanal(d.schedule||[]);toast('Expediente, duração e pausas salvos.');}catch(e){toast(e.message);}finally{if(button)button.disabled=false;}}
+async function salvarAgendaSemanal(){
+    const button=$('saveProfessionalScheduleButton');if(button)button.disabled=true;
+    try{
+        const dias=dadosAgendaSemanal();
+        validarAgendaSemanal(dias);
+        const d=await api('professional_save_schedule',{method:'POST',body:{dias}});
+        const savedSchedule=Array.isArray(d.schedule)?d.schedule:[];
+        if(savedSchedule.length!==dias.length)throw new Error('O servidor não confirmou o salvamento dos sete dias. Tente novamente.');
+        desenharAgendaSemanal(savedSchedule);
+        const activeDays=savedSchedule.filter(row=>row.ativo===true||Number(row.ativo)===1||['t','true'].includes(String(row.ativo).toLowerCase())).length;
+        toast(activeDays?'Expediente, duração e pausas salvos.': 'Expediente salvo, mas nenhum dia está ativo; o link público não mostrará horários.');
+    }catch(e){toast(e.message);}
+    finally{if(button)button.disabled=false;}
+}
 async function salvarPerfilProfissional(){const body={nome:$('profSetNome').value.trim(),cnpj:$('profSetCnpj').value.trim(),especialidade:$('profSetEspecialidade').value.trim(),registro_profissional:$('profSetRegistro').value.trim(),telefone:$('profSetTelefone').value.trim(),whatsapp:$('profSetWhatsapp').value.trim(),modalidade:$('profSetModalidade').value.trim(),horario_funcionamento:$('profSetHorario').value.trim(),valor_consulta:$('profSetValor').value,endereco:$('profSetEndereco').value.trim(),apresentacao:$('profSetApresentacao').value.trim(),aviso_publico:$('profSetAviso').value.trim(),mensagem_pos_venda:mensagemPosVenda,cor_primaria:$('profSetCor').value,limite_diario:Number($('profSetLimiteDiario')?.value||12),confirmacao_automatica:Number($('profSetAutoConfirm').value),cancelamento_ate_horas:Number($('profCancelHours').value||0),remarcacao_ate_horas:Number($('profRescheduleHours').value||0)};try{const d=await api('professional_update_settings',{method:'POST',body});professionalSession.nome=d.professional.nome;const file=$('profLogoFile').files[0];if(file){const form=new FormData();form.append('logo',file);await api('professional_upload_logo',{method:'POST',body:form});}atualizarLinkPublicoClinica(d.professional.slug||professionalSession?.slug);toast('Perfil e regras da clínica salvos.');}catch(e){toast(e.message);}}
 let planoPagamentoSelecionado=null;
 let agendaMesAtual=new Date();

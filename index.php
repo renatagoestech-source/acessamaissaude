@@ -70,7 +70,14 @@ if ($appPortal !== '' && $requestPath !== $portalPath) {
         </header>
 
         <main>
-            <section class="card page-section" id="portalChooserSection">
+            <section class="card page-section" id="appLoadingSection" role="status" aria-live="polite" aria-busy="true">
+                <div class="database-setup">
+                    <span class="eyebrow">ACESSA+ SAÚDE</span>
+                    <h1 id="appLoadingTitle">Carregando sua clínica</h1>
+                    <p id="appLoadingMessage">Aguarde enquanto preparamos o agendamento.</p>
+                </div>
+            </section>
+            <section class="card page-section hidden" id="portalChooserSection">
                 <div class="database-setup portal-chooser">
                     <img src="img/logo.png" class="registration-hero-logo" alt="Acessa+ Saúde">
                     <span class="eyebrow">ACESSA+ SAÚDE</span>
@@ -86,7 +93,7 @@ if ($appPortal !== '' && $requestPath !== $portalPath) {
             <section class="card page-section hidden clinic-public-shell" id="publicClinicSection"><div class="public-clinic-hero"><div class="clinic-brandbar"><div class="platform-signature"><img src="img/logo.png" class="public-system-logo" alt="Acessa+ Saúde"><span>Uma experiência Acessa+ Saúde</span></div><span class="clinic-public-tag">AGENDAMENTO PARTICULAR</span></div><div class="clinic-hero-grid"><div class="clinic-hero-copy"><span class="eyebrow">CUIDADO PERSONALIZADO</span><h1 id="publicClinicName">Clínica</h1><p id="publicClinicPresentation">Agende sua consulta de forma simples, segura e acolhedora.</p><p id="publicClinicDetails" class="clinic-details"></p><div id="publicClinicNotice" class="public-clinic-notice"></div></div><div class="clinic-logo-card"><img src="img/logo.png" id="publicClinicLogo" class="clinic-public-logo" alt="Logo da clínica"></div></div></div><div id="publicClinicConfirmation" class="clinic-confirmation hidden"></div><div class="public-booking-grid"><div class="booking-intro"><span class="eyebrow">SEU PRÓXIMO CUIDADO</span><h2>Vamos marcar sua consulta?</h2><p>Preencha seus dados e escolha o melhor horário. A clínica já receberá as informações para organizar seu atendimento.</p><div class="booking-benefits"><span>✓ Atendimento organizado</span><span>✓ Histórico por CPF</span><span>✓ Confirmação da marcação</span></div></div><div class="registration-box public-clinic-form"><div class="form-heading"><span class="form-step">01</span><div><h2>Solicitar consulta</h2><p class="subtitle">Seus dados ficam protegidos e são usados para localizar seu histórico.</p></div></div><label>Nome completo</label><input id="publicPatientName" placeholder="Como podemos chamar você?"><label>E-mail</label><input id="publicPatientEmail" type="email" placeholder="voce@email.com"><label>CPF</label><input id="publicPatientCpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00"><small class="field-help">Usaremos o CPF para localizar e agrupar seu histórico na clínica.</small><label>Celular</label><input id="publicPatientPhone" placeholder="(00) 00000-0000"><div class="form-grid"><div><label>Data desejada</label><input id="publicPatientDate" type="date" required></div><div><label>Horário disponível</label><select id="publicPatientTime" required disabled><option value="">Escolha uma data primeiro</option></select><small id="publicSlotsHelp" class="field-help">A clínica exibirá somente horários livres.</small></div></div><label>Assunto da consulta</label><textarea id="publicPatientSubject" placeholder="Conte brevemente como podemos ajudar"></textarea><button class="btn primary full" onclick="solicitarConsultaClinica()">Enviar solicitação <span>→</span></button><button class="btn secondary full" onclick="sairPaginaClinica()">Sair</button><small class="privacy-note">Acessa+ Saúde • seus dados tratados com cuidado</small></div></div></section>
 
             <!-- CONFIGURAÇÃO DO BANCO -->
-            <section class="card page-section" id="databaseSetupSection">
+            <section class="card page-section hidden" id="databaseSetupSection">
                 <div class="database-setup">
                     <span class="eyebrow">CONFIGURAÇÃO NECESSÁRIA</span>
                     <h1>Banco de dados ainda não conectado</h1>
