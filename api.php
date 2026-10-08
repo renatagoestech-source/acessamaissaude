@@ -257,7 +257,7 @@ try {
 
     json_response([
         'success' => false,
-        'message' => 'Erro de banco de dados. Verifique se o MySQL do XAMPP está iniciado e se o banco foi instalado.'
+        'message' => 'Não foi possível conectar ao banco de dados. Verifique a configuração de conexão do servidor.'
     ], 500);
 
 } catch (Throwable $e) {

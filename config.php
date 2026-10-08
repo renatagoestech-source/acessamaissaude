@@ -59,6 +59,16 @@ function db(): PDO
     return $pdo;
 }
 
+function postgres_pdo_options(int $port): array
+{
+    return [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        // Supabase transaction pooling (6543) does not support native prepared statements.
+        PDO::ATTR_EMULATE_PREPARES => $port === 6543,
+    ];
+}
+
 function connect_supabase_postgres(string $databaseUrl): PDO
 {
     $parts = parse_url($databaseUrl);
@@ -74,15 +84,12 @@ function connect_supabase_postgres(string $databaseUrl): PDO
         throw new RuntimeException('DATABASE_URL está incompleta: host, usuário e banco são obrigatórios.');
     }
     require_once __DIR__ . '/postgres_compat.php';
+    $port = (int)($parts['port'] ?? 5432);
     $dsn = 'pgsql:host=' . $host
-        . ';port=' . (int)($parts['port'] ?? 5432)
+        . ';port=' . $port
         . ';dbname=' . $database
         . ';sslmode=require;connect_timeout=8';
-    $options = [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES => false,
-    ];
+    $options = postgres_pdo_options($port);
     $pdo = new PostgresCompatPDO($dsn, $user, $password, $options);
     $schema = $pdo->query("SELECT to_regclass('public.ubs') AS ubs, to_regclass('public.pacientes') AS pacientes")->fetch();
     if (!$schema || !$schema['ubs'] || !$schema['pacientes']) {

@@ -4,7 +4,7 @@ Este repositório contém a versão PHP do Acessa+ Saúde preparada para o runti
 
 ## Supabase PostgreSQL (produção)
 
-No Vercel, configure `DATABASE_URL` como variável **Sensitive**, somente no servidor. Use a connection string PostgreSQL do projeto Supabase e TLS; para funções serverless, prefira a connection string de pooler adequada à sua região/rede. O PHP conecta diretamente ao banco e executa as consultas no servidor. **Não coloque essa URL, a senha do banco ou uma service-role key no JavaScript/browser.** As policies RLS bloqueiam os papéis públicos `anon` e `authenticated`; o backend usa a credencial privada do servidor.
+No Vercel, configure `DATABASE_URL` como variável **Sensitive** somente no servidor. Para funções serverless, copie no Supabase **Connect → Transaction pooler** a connection string do **Shared Pooler** (porta `6543`, IPv4), substitua o placeholder da senha e codifique caracteres reservados da senha com percent-encoding. A conexão direta `db.<project-ref>.supabase.co:5432` é IPv6 por padrão e não funciona em redes Vercel sem saída IPv6. O modo transaction do Supabase não suporta prepared statements nativos; a aplicação ativa emulação PDO automaticamente quando detecta a porta `6543`. O PHP conecta ao PostgreSQL somente no servidor. **Não coloque essa URL, a senha do banco ou uma service-role key no JavaScript/browser.** As policies RLS bloqueiam os papéis públicos `anon` e `authenticated`; o backend usa a credencial privada do servidor.
 
 Quando `DATABASE_URL` estiver definido, a aplicação não executa migrações automáticas nem altera o schema na conexão. As tabelas já precisam existir no Supabase. **Não execute `database.sql` em produção:** esse arquivo começa com `DROP DATABASE` e serve apenas como referência de instalação MySQL limpa.
 
@@ -25,7 +25,7 @@ Como o sistema pode armazenar informações de saúde, use contas e dados fictí
 
 > **Importante:** no Vercel, defina a raiz do projeto como a pasta que contém diretamente `vercel.json`, `index.php` e a pasta `api`. Não selecione uma pasta pai que contenha `acessa-saude-vercel` como subpasta.
 
-5. Em **Project Settings → Environment Variables**, cadastre `DATABASE_URL` como segredo no ambiente Production; não use dados reais em Preview.
+5. Em **Project Settings → Environment Variables**, cadastre a URL do **Shared Transaction Pooler** como segredo `DATABASE_URL` no ambiente Production; não use dados reais em Preview.
 6. Faça o deploy.
 
 ## Subir pelo terminal
