@@ -73,6 +73,9 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
     static $done = false;
     if ($done) return;
     $done = true;
+    if (strtolower((string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME)) === 'mysql') {
+        $pdo->exec('CREATE TABLE IF NOT EXISTS php_sessions (id_hash CHAR(64) PRIMARY KEY, payload MEDIUMTEXT NOT NULL, expires_at INT UNSIGNED NOT NULL, INDEX idx_php_sessions_expires_at (expires_at)) ENGINE=InnoDB');
+    }
     $quotedDb = $pdo->quote($dbName);
     $columnExists = static function (string $table, string $column) use ($pdo, $quotedDb): bool {
         $stmt = $pdo->prepare('SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '.$quotedDb.' AND TABLE_NAME = ? AND COLUMN_NAME = ?');

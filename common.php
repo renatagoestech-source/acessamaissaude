@@ -57,11 +57,19 @@ final class PostgresSessionHandler implements SessionHandlerInterface, SessionUp
 {
     private PDO $pdo;
     private int $lifetime;
-
+    private string $table;
+    private bool $mysql;
     public function __construct(PDO $pdo)
     {
         $this->pdo = $pdo;
         $this->lifetime = max(SESSION_ABSOLUTE_TIMEOUT, (int)ini_get('session.gc_maxlifetime'));
+        try {
+            $driver = (string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+        } catch (Throwable) {
+            $driver = '';
+        }
+        $this->mysql = strtolower($driver) === 'mysql';
+        $this->table = $this->mysql ? 'php_sessions' : 'public.php_sessions';
     }
 
     public function open(string $path, string $name): bool
@@ -77,14 +85,14 @@ final class PostgresSessionHandler implements SessionHandlerInterface, SessionUp
     public function validateId(string $id): bool
     {
         if ($id === '') return false;
-        $stmt = $this->pdo->prepare('SELECT 1 FROM public.php_sessions WHERE id_hash = ? AND expires_at > ?');
+        $stmt = $this->pdo->prepare('SELECT 1 FROM '.$this->table.' WHERE id_hash = ? AND expires_at > ?');
         $stmt->execute([$this->idHash($id), time()]);
         return $stmt->fetchColumn() !== false;
     }
 
     public function read(string $id): string|false
     {
-        $stmt = $this->pdo->prepare('SELECT payload FROM public.php_sessions WHERE id_hash = ? AND expires_at > ?');
+        $stmt = $this->pdo->prepare('SELECT payload FROM '.$this->table.' WHERE id_hash = ? AND expires_at > ?');
         $stmt->execute([$this->idHash($id), time()]);
         $payload = $stmt->fetchColumn();
         if (!is_string($payload)) return '';
@@ -94,7 +102,10 @@ final class PostgresSessionHandler implements SessionHandlerInterface, SessionUp
 
     public function write(string $id, string $data): bool
     {
-        $stmt = $this->pdo->prepare('INSERT INTO public.php_sessions (id_hash, payload, expires_at) VALUES (?, ?, ?) ON CONFLICT (id_hash) DO UPDATE SET payload = EXCLUDED.payload, expires_at = EXCLUDED.expires_at');
+        $sql = $this->mysql
+            ? 'INSERT INTO php_sessions (id_hash, payload, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE payload = VALUES(payload), expires_at = VALUES(expires_at)'
+            : 'INSERT INTO public.php_sessions (id_hash, payload, expires_at) VALUES (?, ?, ?) ON CONFLICT (id_hash) DO UPDATE SET payload = EXCLUDED.payload, expires_at = EXCLUDED.expires_at';
+        $stmt = $this->pdo->prepare($sql);
         return $stmt->execute([$this->idHash($id), base64_encode($data), time() + $this->lifetime]);
     }
 
@@ -105,13 +116,13 @@ final class PostgresSessionHandler implements SessionHandlerInterface, SessionUp
 
     public function destroy(string $id): bool
     {
-        $stmt = $this->pdo->prepare('DELETE FROM public.php_sessions WHERE id_hash = ?');
+        $stmt = $this->pdo->prepare('DELETE FROM '.$this->table.' WHERE id_hash = ?');
         return $stmt->execute([$this->idHash($id)]);
     }
 
     public function gc(int $max_lifetime): int|false
     {
-        $stmt = $this->pdo->prepare('DELETE FROM public.php_sessions WHERE expires_at <= ?');
+        $stmt = $this->pdo->prepare('DELETE FROM '.$this->table.' WHERE expires_at <= ?');
         if (!$stmt->execute([time()])) return false;
         return $stmt->rowCount();
     }
@@ -124,7 +135,8 @@ final class PostgresSessionHandler implements SessionHandlerInterface, SessionUp
 
 function configure_database_session_handler(PDO $pdo): void
 {
-    if (trim((string)(getenv('DATABASE_URL') ?: '')) === '') return;
+    $serverless = trim((string)(getenv('DATABASE_URL') ?: '')) !== '' || getenv('VERCEL') === '1';
+    if (!$serverless) return;
     if (session_status() !== PHP_SESSION_NONE) {
         throw new LogicException('O handler de sessão precisa ser configurado antes de session_start().');
     }

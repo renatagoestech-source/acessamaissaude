@@ -268,7 +268,8 @@ try {
 
     json_response([
         'success' => false,
-        'message' => 'Não foi possível acessar a base de dados. Tente novamente mais tarde.'
+        'message' => 'Não foi possível acessar a base de dados. Tente novamente mais tarde.',
+        'code' => 'DATABASE_UNAVAILABLE'
     ], 500);
 
 } catch (Throwable $e) {
