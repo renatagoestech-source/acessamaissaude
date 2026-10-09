@@ -39,6 +39,8 @@ for (const match of html.matchAll(/on(?:click|change|input|blur|submit)\s*=\s*"(
 assert.deepEqual([...missing], [], `Handlers HTML sem função JavaScript: ${[...missing].join(', ')}`);
 assert.doesNotMatch(html, /class="nav-item" onclick="mostrarUBSMenu\(\)"/, 'A aba UBS não deve aparecer na navegação lateral do paciente.');
 assert.match(html, /class="nav-item" onclick="iniciarAgendamento\(\)"/, 'O acesso para agendar consulta deve continuar disponível.');
+assert.match(html, /id="databaseSetupRetryButton"[^>]*onclick="tentarRecarregarPortal\(\)"/, 'A tela de falha de bootstrap deve permitir uma nova tentativa.');
+assert.doesNotMatch(js, /O sistema não conseguiu acessar o banco de dados\. Instale ou verifique o MySQL/, 'A falha de qualquer chamada inicial não deve ser rotulada falsamente como falha do MySQL.');
 
 console.log('CPF helpers e handlers HTML: OK');
 
@@ -212,8 +214,62 @@ async function testPatientCampaigns() {
   console.log('Campanhas e eventos atualizados para a UBS do paciente: OK');
 }
 
+async function testStartupRetryAndErrorMessage() {
+  const retryStart = js.indexOf('async function apiWithTransientRetry(');
+  const retryEnd = js.indexOf('\nasync function carregarDados()', retryStart);
+  assert(retryStart >= 0 && retryEnd > retryStart, 'O carregamento inicial deve ter uma rotina limitada de repetição.');
+  let calls = 0;
+  const context = {
+    api: async action => {
+      assert.equal(action, 'get_app_config');
+      calls++;
+      if (calls === 1) {
+        const error = new Error('Falha temporária');
+        error.data = { httpStatus: 503 };
+        throw error;
+      }
+      return { success: true };
+    },
+    setTimeout(callback) { callback(); return 1; }
+  };
+  vm.runInNewContext(js.slice(retryStart, retryEnd), context);
+  assert.equal((await context.apiWithTransientRetry('get_app_config')).success, true);
+  assert.equal(calls, 2, 'Erro transitório de rede/servidor deve ganhar exatamente uma nova tentativa.');
+
+  calls = 0;
+  context.api = async () => {
+    calls++;
+    const error = new Error('Sessão profissional expirada. Faça login novamente.');
+    error.data = { httpStatus: 401 };
+    throw error;
+  };
+  let authMessage = '';
+  try { await context.apiWithTransientRetry('get_app_config'); }
+  catch (error) { authMessage = error.message; }
+  assert.equal(calls, 1, 'Erros 4xx não devem ser repetidos como se fossem falhas temporárias.');
+  assert.equal(authMessage, 'Sessão profissional expirada. Faça login novamente.');
+
+  const start = js.indexOf('async function carregarDados()');
+  const end = js.indexOf('\nasync function carregarConsultasPaciente', start);
+  const setupMessage = { textContent: '' };
+  const startup = {
+    apiWithTransientRetry: async () => { throw new Error('Falha de conexão da API'); },
+    $: id => id === 'databaseSetupMessage' ? setupMessage : null,
+    renderUBS() {},
+    preencherSelectUBSPaciente() {},
+    databaseReady: true,
+    ubsList: [],
+    appointments: []
+  };
+  vm.runInNewContext(js.slice(start, end), startup);
+  await startup.carregarDados();
+  assert.equal(setupMessage.textContent, 'Falha de conexão da API', 'A interface deve exibir a causa real em vez da instrução MySQL genérica.');
+  console.log('Retry do bootstrap e mensagem de erro precisa: OK');
+}
+
 async function runAsyncTests() {
   await testScheduleLoadingStates();
+  await testStartupRetryAndErrorMessage();
   await testPatientCampaigns();
 }
 

@@ -101,19 +101,25 @@ if ($appPortal !== '' && $requestPath !== $portalPath) {
             <!-- CONFIGURAÇÃO DO BANCO -->
             <section class="card page-section hidden" id="databaseSetupSection">
                 <div class="database-setup">
-                    <span class="eyebrow">CONFIGURAÇÃO NECESSÁRIA</span>
-                    <h1>Banco de dados ainda não conectado</h1>
-                    <p id="databaseSetupMessage">O sistema está verificando a conexão com o MySQL.</p>
-                    <div class="database-steps">
-                        <div><b>1</b><span>Inicie o Apache e o MySQL no XAMPP.</span></div>
-                        <div><b>2</b><span>Abra o instalador para criar o banco <strong>conecta_saude</strong>.</span></div>
-                        <div><b>3</b><span>Volte para esta página e atualize o navegador.</span></div>
-                    </div>
+                    <span class="eyebrow">CARREGAMENTO DO PORTAL</span>
+                    <h1>Não foi possível carregar o portal</h1>
+                    <p id="databaseSetupMessage" role="alert">Não foi possível carregar os dados agora. Verifique sua conexão e tente novamente.</p>
                     <div class="actions database-actions">
-                        <a class="btn primary" href="install.php">Instalar banco de dados</a>
-                        <a class="btn secondary" href="diagnostico_xampp.php">Ver diagnóstico do XAMPP</a>
+                        <button id="databaseSetupRetryButton" type="button" class="btn primary" onclick="tentarRecarregarPortal()">Tentar novamente</button>
                     </div>
-                    <p class="database-note">Se o MySQL usa outra porta ou senha, veja as instruções no arquivo <strong>ATUALIZACAO.txt</strong>.</p>
+                    <details class="database-local-help">
+                        <summary>Ajuda para instalação local com XAMPP</summary>
+                        <div class="database-steps">
+                            <div><b>1</b><span>Inicie o Apache e o MySQL no XAMPP.</span></div>
+                            <div><b>2</b><span>Abra o instalador para criar o banco <strong>conecta_saude</strong>.</span></div>
+                            <div><b>3</b><span>Volte para esta página e atualize o navegador.</span></div>
+                        </div>
+                        <div class="actions database-actions">
+                            <a class="btn secondary" href="install.php">Instalar banco de dados</a>
+                            <a class="btn secondary" href="diagnostico_xampp.php">Ver diagnóstico do XAMPP</a>
+                        </div>
+                        <p class="database-note">Se o MySQL usa outra porta ou senha, veja as instruções no arquivo <strong>ATUALIZACAO.txt</strong>.</p>
+                    </details>
                 </div>
             </section>
 

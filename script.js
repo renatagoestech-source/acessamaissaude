@@ -193,20 +193,33 @@ async function api(action, options = {}) {
     if (response.status === 419) csrfToken = null;
     if (!response.ok || data.success === false) {
         const error = new Error(data.message || "Erro no servidor.");
-        error.data = data;
+        error.data = { ...data, httpStatus: response.status };
         throw error;
     }
     return data;
+}
+async function apiWithTransientRetry(action, options = {}) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            return await api(action, options);
+        } catch (error) {
+            const status = Number(error?.data?.httpStatus || 0);
+            const retryable = status === 0 || status >= 500;
+            if (!retryable || attempt === 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+    }
+    throw new Error("Não foi possível carregar os dados do sistema.");
 }
 async function carregarDados() {
 
     try {
 
-        const configData = await api("get_app_config");
+        const configData = await apiWithTransientRetry("get_app_config");
         appConfig = configData.config || appConfig;
         aplicarConfiguracaoApp();
         const data =
-            await api("get_ubs");
+            await apiWithTransientRetry("get_ubs");
 
         ubsList =
             data.ubs || [];
@@ -236,12 +249,20 @@ async function carregarDados() {
 
         const setupMessage = $("databaseSetupMessage");
         if (setupMessage) {
-            setupMessage.textContent =
-                "O sistema não conseguiu acessar o banco de dados. Instale ou verifique o MySQL para liberar o cadastro, os agendamentos e a área administrativa.";
+            const networkError = error?.name === "TypeError" && !error?.data?.httpStatus;
+            setupMessage.textContent = networkError
+                ? "Não foi possível comunicar com o servidor. Verifique sua conexão e tente novamente."
+                : (typeof error?.message === "string" && error.message.trim()
+                    ? error.message
+                    : "Não foi possível carregar os dados do sistema. Tente novamente.");
         }
 
     }
 
+}
+
+function tentarRecarregarPortal() {
+    window.location.reload();
 }
 
 async function carregarConsultasPaciente(sus) {
