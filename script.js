@@ -2728,7 +2728,7 @@ async function loginProfissional(){
     if(!email||!senha){toast('Informe e-mail e senha.');return;}
     const button=$('professionalLoginButton'),original=button?.innerHTML;
     if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Entrando…';}
-    try{const d=await api('professional_login',{method:'POST',body:{email,senha}});professionalSession=d.professional;fecharLoginProfissional();abrirPortalProfissional('dashboard');}
+    try{const d=await api('professional_login',{method:'POST',body:{email,senha}});professionalSession=d.professional;atualizarLinkPublicoClinica(d.professional?.slug);fecharLoginProfissional();abrirPortalProfissional('dashboard');}
     catch(e){toast(e.message);}
     finally{if(button){button.disabled=false;button.removeAttribute('aria-busy');button.innerHTML=original;}}
 }
@@ -2741,7 +2741,7 @@ async function cadastrarProfissional(){
     if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='Criando cadastro…';}
     try{
         const d=await api('professional_register',{method:'POST',body:{nome,email,senha,especialidade:$('professionalEspecialidade').value.trim()}});
-        professionalSession=d.professional;
+        professionalSession=d.professional;atualizarLinkPublicoClinica(d.professional?.slug);
         fecharLoginProfissional();
         await carregarPerfilProfissional();
         abrirPortalProfissional('dashboard');
@@ -2902,14 +2902,15 @@ function atualizarLinkPublicoClinica(slug) {
     const publicLink = $("profPublicLink");
     const previewLink = $("profPublicLinkOpen");
     const copyButton = $("copyPublicClinicLinkButton");
-    if (!slug) {
+    const publicSlug=String(slug??'').trim();
+    if (!publicSlug) {
         if (publicLink) { publicLink.href = "#"; publicLink.textContent = "Link público indisponível"; delete publicLink.dataset.url; }
         if (previewLink) { previewLink.href = "#"; previewLink.setAttribute("aria-disabled", "true"); }
         if (copyButton) copyButton.disabled = true;
         return;
     }
     const url = new URL(appPath("/"), location.origin);
-    url.searchParams.set("clinica", slug);
+    url.searchParams.set("clinica", publicSlug);
     const href = url.toString();
     if (publicLink) { publicLink.href = href; publicLink.textContent = href; publicLink.dataset.url = href; }
     if (previewLink) { previewLink.href = href; previewLink.removeAttribute("aria-disabled"); }
@@ -2950,7 +2951,11 @@ async function carregarPerfilProfissional(){
         atualizarLinkPublicoClinica(p.slug);
         definirPreviewLogoProfissional(p.logoArquivo?appPath('/uploads/marca/'+encodeURIComponent(p.logoArquivo)):appPath('/img/logo-transparent.png'));
         await carregarAgendaSemanal();
-    }catch(e){toast(e.message);}
+    }catch(e){
+        if(professionalSession?.slug)atualizarLinkPublicoClinica(professionalSession.slug);
+        else atualizarLinkPublicoClinica('');
+        toast(e.message);
+    }
 }
 const diasAgendaProfissional=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 function agendaAtivo(value){return value===true||value===1||['1','t','true','yes','on'].includes(String(value??'').trim().toLowerCase());}

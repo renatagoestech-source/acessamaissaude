@@ -369,15 +369,29 @@ function professional_register(PDO $pdo, array $data): never {
         $q=$pdo->prepare("INSERT INTO profissionais (nome,email,slug,senha_hash,especialidade,registro_profissional,telefone,status) VALUES (?,?,?,?,?,?,?,'ativo')");
         $q->execute([$nome,$email,$slug,password_hash($senha,PASSWORD_DEFAULT),trim((string)($data['especialidade']??''))?:null,trim((string)($data['registro_profissional']??''))?:null,trim((string)($data['telefone']??''))?:null]);
         $id=(int)$pdo->lastInsertId();
-        $q=$pdo->prepare('SELECT id,nome,email,auth_version FROM profissionais WHERE id=?'); $q->execute([$id]); $p=$q->fetch();
+        $q=$pdo->prepare('SELECT id,nome,email,slug,auth_version FROM profissionais WHERE id=?'); $q->execute([$id]); $p=$q->fetch();
         auth_clear_attempts($pdo,$key); session_regenerate_id(true); rotate_csrf_token();
         $_SESSION['_auth_created_at']=time(); $_SESSION['_last_activity']=time();
-        $_SESSION['professional']=['id'=>(int)$p['id'],'email'=>$p['email'],'nome'=>$p['nome'],'auth_version'=>(int)$p['auth_version']];
+        $_SESSION['professional']=['id'=>(int)$p['id'],'email'=>$p['email'],'nome'=>$p['nome'],'slug'=>$p['slug'],'auth_version'=>(int)$p['auth_version']];
         audit_professional_event($pdo,$id,'cadastro_profissional','profissionais',(string)$id,['email_hash'=>hash('sha256',$email)]);
-        json_response(['success'=>true,'message'=>'Conta profissional criada. Você já pode começar.','csrf_token'=>$_SESSION['_csrf_token'],'professional'=>['id'=>(int)$p['id'],'nome'=>$p['nome'],'email'=>$p['email']]]);
+        json_response(['success'=>true,'message'=>'Conta profissional criada. Você já pode começar.','csrf_token'=>$_SESSION['_csrf_token'],'professional'=>['id'=>(int)$p['id'],'nome'=>$p['nome'],'email'=>$p['email'],'slug'=>$p['slug']]]);
     } catch(PDOException $e){ if(database_is_unique_violation($e)) json_response(['success'=>false,'message'=>'Este e-mail já está cadastrado. Entre ou use “Esqueci minha senha”.'],409); json_response(['success'=>false,'message'=>'Não foi possível criar a conta profissional. Verifique os dados e tente novamente.'],500); }
 }
 function slug_publico(PDO $pdo,string $nome): string { $s=iconv('UTF-8','ASCII//TRANSLIT',$nome);$s=preg_replace('/[^a-z0-9]+/','-',strtolower((string)$s));$s=trim($s,'-')?:'profissional';$base=$s;$i=2;$q=$pdo->prepare('SELECT 1 FROM profissionais WHERE slug=? LIMIT 1');while(true){$q->execute([$s]);if(!$q->fetchColumn())return $s;$s=$base.'-'.$i++;} }
+function ensure_professional_public_slug(PDO $pdo,array $professional): array {
+    $existing=trim((string)($professional['slug']??''));
+    if($existing!==''){$professional['slug']=$existing;return $professional;}
+    $id=(int)($professional['id']??0);
+    if($id<1)return $professional;
+    $generated=slug_publico($pdo,'profissional-'.$id);
+    $update=$pdo->prepare("UPDATE profissionais SET slug=? WHERE id=? AND (slug IS NULL OR TRIM(slug)='')");
+    $update->execute([$generated,$id]);
+    if($update->rowCount()>0){$professional['slug']=$generated;return $professional;}
+    $lookup=$pdo->prepare('SELECT slug FROM profissionais WHERE id=?');$lookup->execute([$id]);
+    $current=trim((string)$lookup->fetchColumn());
+    if($current!=='')$professional['slug']=$current;
+    return $professional;
+}
 function public_clinic(PDO $pdo,string $slug): never {
     if($slug==='')json_response(['success'=>false,'message'=>'Clínica não informada.'],422);
     $q=$pdo->prepare("SELECT id,nome,slug,especialidade,registro_profissional AS registroProfissional,telefone,whatsapp,endereco,modalidade,valor_consulta AS valorConsulta,limite_diario AS limiteDiario,apresentacao,logo_arquivo AS logoArquivo,horario_funcionamento AS horarioFuncionamento,mensagem_pos_venda AS mensagemPosVenda,aviso_publico AS avisoPublico,cor_primaria AS corPrimaria,cor_secundaria AS corSecundaria,confirmacao_automatica AS confirmacaoAutomatica,cancelamento_ate_horas AS cancelamentoAteHoras,remarcacao_ate_horas AS remarcacaoAteHoras FROM profissionais WHERE slug=? AND status='ativo'");
@@ -447,21 +461,25 @@ function public_clinic_join_waitlist(PDO $pdo,array $data): never {
 function professional_login(PDO $pdo, array $data): never {
     $email=strtolower(required_string($data,'email')); $senha=(string)($data['senha']??''); $key=auth_attempt_key('profissional_login',$email);
     if(auth_is_limited($pdo,$key)) json_response(['success'=>false,'message'=>'Muitas tentativas de acesso. Aguarde 15 minutos e tente novamente.'],429);
-    $q=$pdo->prepare('SELECT id,nome,email,senha_hash,status,email_verificado_em,auth_version FROM profissionais WHERE email=?');$q->execute([$email]);$p=$q->fetch();
+    $q=$pdo->prepare('SELECT id,nome,email,slug,senha_hash,status,email_verificado_em,auth_version FROM profissionais WHERE email=?');$q->execute([$email]);$p=$q->fetch();
     if(!$p||!password_verify($senha,$p['senha_hash'])) { auth_record_failure($pdo,$key); json_response(['success'=>false,'message'=>'E-mail ou senha inválidos.'],401); }
     // Cadastros antigos aguardavam verificação por e-mail; ao autenticar corretamente,
     // são ativados como no fluxo anterior. Contas suspensas continuam bloqueadas.
     if($p['status']==='pendente') { $pdo->prepare("UPDATE profissionais SET status='ativo' WHERE id=? AND status='pendente'")->execute([$p['id']]); $p['status']='ativo'; }
     if($p['status']!=='ativo') json_response(['success'=>false,'message'=>'Esta conta está suspensa. Entre em contato com o administrador.'],403);
+    $p=ensure_professional_public_slug($pdo,$p);
     auth_clear_attempts($pdo,$key); session_regenerate_id(true); rotate_csrf_token();
     $_SESSION['_auth_created_at']=time(); $_SESSION['_last_activity']=time();
-    $_SESSION['professional']=['id'=>(int)$p['id'],'email'=>$p['email'],'nome'=>$p['nome'],'auth_version'=>(int)$p['auth_version']];
+    $_SESSION['professional']=['id'=>(int)$p['id'],'email'=>$p['email'],'nome'=>$p['nome'],'slug'=>$p['slug']??'','auth_version'=>(int)$p['auth_version']];
     audit_professional_event($pdo,(int)$p['id'],'login_profissional','profissionais',(string)$p['id']);
-    json_response(['success'=>true,'csrf_token'=>$_SESSION['_csrf_token'],'professional'=>['id'=>(int)$p['id'],'nome'=>$p['nome'],'email'=>$p['email']]]);
+    json_response(['success'=>true,'csrf_token'=>$_SESSION['_csrf_token'],'professional'=>['id'=>(int)$p['id'],'nome'=>$p['nome'],'email'=>$p['email'],'slug'=>$p['slug']??'']]);
 }
 function professional_me(PDO $pdo): never {
     $s=require_professional();$q=$pdo->prepare('SELECT id,nome,email,slug,cnpj,especialidade,registro_profissional AS registroProfissional,telefone,whatsapp,endereco,modalidade,valor_consulta AS valorConsulta,limite_diario AS limiteDiario,apresentacao,logo_arquivo AS logoArquivo,horario_funcionamento AS horarioFuncionamento,mensagem_pos_venda AS mensagemPosVenda,aviso_publico AS avisoPublico,cor_primaria AS corPrimaria,cor_secundaria AS corSecundaria,confirmacao_automatica AS confirmacaoAutomatica,cancelamento_ate_horas AS cancelamentoAteHoras,remarcacao_ate_horas AS remarcacaoAteHoras,status FROM profissionais WHERE id=?');
-    $q->execute([$s['id']]);json_response(['success'=>true,'professional'=>$q->fetch()]);
+    $q->execute([$s['id']]);$professional=$q->fetch();
+    if(!is_array($professional))json_response(['success'=>false,'message'=>'Perfil profissional não encontrado.'],404);
+    $professional=ensure_professional_public_slug($pdo,$professional);
+    json_response(['success'=>true,'professional'=>$professional]);
 }
 
 function professional_update_settings(PDO $pdo,array $data): never {

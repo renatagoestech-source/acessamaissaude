@@ -18,6 +18,7 @@ assert.equal(context.formatarCpf('52998224725'), '529.982.247-25');
 assert.equal(context.formatarCpf('123'), '123');
 
 const html = fs.readFileSync('index.php', 'utf8');
+const apiSource = fs.readFileSync('api.php', 'utf8');
 const definitions = new Set([
   ...Array.from(js.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g), match => match[1]),
   ...Array.from(js.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\(?[^=]*=>)/g), match => match[1]),
@@ -76,6 +77,13 @@ function testClinicPublicLink() {
 }
 
 testClinicPublicLink();
+assert(apiSource.includes('function ensure_professional_public_slug('), 'Contas antigas sem slug devem receber um identificador público seguro.');
+assert(apiSource.includes("$generated=slug_publico($pdo,'profissional-'.$id);"));
+assert(apiSource.includes("if($existing!==''){$professional['slug']=$existing;return $professional;}"), 'Slugs públicos existentes devem ser preservados.');
+assert(apiSource.includes("'slug'=>$p['slug']"), 'O backend deve incluir o slug na resposta de cadastro/login.');
+assert(apiSource.includes('$p=ensure_professional_public_slug($pdo,$p);'));
+assert(apiSource.includes('$professional=ensure_professional_public_slug($pdo,$professional);'));
+assert(js.includes('professionalSession=d.professional;atualizarLinkPublicoClinica(d.professional?.slug);'), 'Login e cadastro devem preencher o link logo após autenticar.');
 assert.match(html, /if \(\$appPortal === 'clinica'\)[\s\S]*http_build_query\(\$_GET/, 'O redirecionamento da rota clínica deve preservar o slug.');
 const css = fs.readFileSync('style.css', 'utf8');
 assert.match(css, /#professionalCalendar \.calendar-cell/);
