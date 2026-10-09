@@ -185,6 +185,14 @@ function professional_session(): ?array
     return $_SESSION['professional'] ?? null;
 }
 
+function professional_session_matches_account(?array $session, ?array $account): bool
+{
+    return $session !== null
+        && $account !== null
+        && ($account['status'] ?? null) === 'ativo'
+        && (int)($session['auth_version'] ?? 0) === (int)($account['auth_version'] ?? -1);
+}
+
 function require_professional(): array
 {
     $session = professional_session();

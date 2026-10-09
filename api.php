@@ -1967,8 +1967,8 @@ function auth_record_failure(PDO $pdo,string $key): void {
 function auth_clear_attempts(PDO $pdo,string $key): void {$q=$pdo->prepare('DELETE FROM tentativas_autenticacao WHERE chave=?');$q->execute([$key]);}
 function validate_professional_session(PDO $pdo): void {
     $s=professional_session();if(!$s)return;
-    $q=$pdo->prepare('SELECT auth_version,status,email_verificado_em FROM profissionais WHERE id=?');$q->execute([(int)$s['id']]);$row=$q->fetch();
-    if(!$row||$row['status']!=='ativo'||empty($row['email_verificado_em'])||(int)($s['auth_version']??0)!==(int)$row['auth_version']){
+    $q=$pdo->prepare('SELECT auth_version,status FROM profissionais WHERE id=?');$q->execute([(int)$s['id']]);$row=$q->fetch();
+    if(!professional_session_matches_account($s,is_array($row)?$row:null)){
         $_SESSION['professional']=null;session_regenerate_id(true);rotate_csrf_token();
     }
 }
