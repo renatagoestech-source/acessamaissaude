@@ -23,6 +23,87 @@ function configure_secure_session(): void
     date_default_timezone_set('America/Sao_Paulo');
 }
 
+/** Persiste sessões PHP em Supabase para que funcionem entre invocações serverless. */
+final class PostgresSessionHandler implements SessionHandlerInterface, SessionUpdateTimestampHandlerInterface
+{
+    private PDO $pdo;
+    private int $lifetime;
+
+    public function __construct(PDO $pdo)
+    {
+        $this->pdo = $pdo;
+        $this->lifetime = max(SESSION_ABSOLUTE_TIMEOUT, (int)ini_get('session.gc_maxlifetime'));
+    }
+
+    public function open(string $path, string $name): bool
+    {
+        return true;
+    }
+
+    public function close(): bool
+    {
+        return true;
+    }
+
+    public function validateId(string $id): bool
+    {
+        if ($id === '') return false;
+        $stmt = $this->pdo->prepare('SELECT 1 FROM public.php_sessions WHERE id_hash = ? AND expires_at > ?');
+        $stmt->execute([$this->idHash($id), time()]);
+        return $stmt->fetchColumn() !== false;
+    }
+
+    public function read(string $id): string|false
+    {
+        $stmt = $this->pdo->prepare('SELECT payload FROM public.php_sessions WHERE id_hash = ? AND expires_at > ?');
+        $stmt->execute([$this->idHash($id), time()]);
+        $payload = $stmt->fetchColumn();
+        if (!is_string($payload)) return '';
+        $decoded = base64_decode($payload, true);
+        return $decoded === false ? '' : $decoded;
+    }
+
+    public function write(string $id, string $data): bool
+    {
+        $stmt = $this->pdo->prepare('INSERT INTO public.php_sessions (id_hash, payload, expires_at) VALUES (?, ?, ?) ON CONFLICT (id_hash) DO UPDATE SET payload = EXCLUDED.payload, expires_at = EXCLUDED.expires_at');
+        return $stmt->execute([$this->idHash($id), base64_encode($data), time() + $this->lifetime]);
+    }
+
+    public function updateTimestamp(string $id, string $data): bool
+    {
+        return $this->write($id, $data);
+    }
+
+    public function destroy(string $id): bool
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM public.php_sessions WHERE id_hash = ?');
+        return $stmt->execute([$this->idHash($id)]);
+    }
+
+    public function gc(int $max_lifetime): int|false
+    {
+        $stmt = $this->pdo->prepare('DELETE FROM public.php_sessions WHERE expires_at <= ?');
+        if (!$stmt->execute([time()])) return false;
+        return $stmt->rowCount();
+    }
+
+    private function idHash(string $id): string
+    {
+        return hash('sha256', $id);
+    }
+}
+
+function configure_database_session_handler(PDO $pdo): void
+{
+    if (trim((string)(getenv('DATABASE_URL') ?: '')) === '') return;
+    if (session_status() !== PHP_SESSION_NONE) {
+        throw new LogicException('O handler de sessão precisa ser configurado antes de session_start().');
+    }
+    if (!session_set_save_handler(new PostgresSessionHandler($pdo), true)) {
+        throw new RuntimeException('Não foi possível configurar o armazenamento persistente da sessão.');
+    }
+}
+
 function enforce_session_lifetime(): void
 {
     $hasAuth = !empty($_SESSION['professional']) || !empty($_SESSION['admin']);

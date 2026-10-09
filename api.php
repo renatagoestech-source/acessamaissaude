@@ -1,12 +1,13 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/common.php';
-configure_secure_session();
-session_start();
-ob_start();
 require_once __DIR__ . '/config.php';
+configure_secure_session();
+ob_start();
 try {
     $pdo = db();
+    configure_database_session_handler($pdo);
+    if (!session_start()) throw new RuntimeException('Não foi possível iniciar a sessão segura.');
     enforce_session_lifetime();
     validate_professional_session($pdo);
     $action = $_GET['action'] ?? '';
