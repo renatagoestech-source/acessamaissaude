@@ -55,6 +55,7 @@ try {
         case 'professional_create_appointment': professional_create_appointment($pdo, body_json()); break;
         case 'professional_appointments': professional_appointments($pdo); break;
         case 'professional_waitlist': professional_waitlist($pdo); break;
+        case 'professional_cancel_waitlist': professional_cancel_waitlist($pdo, body_json()); break;
         case 'professional_update_appointment': professional_update_appointment($pdo, body_json()); break;
         case 'subscription_plans': subscription_plans($pdo); break;
         case 'professional_subscription': professional_subscription($pdo); break;
@@ -452,10 +453,9 @@ function public_clinic_book(PDO $pdo,array $data): never {
 }
 function public_clinic_join_waitlist(PDO $pdo,array $data): never {
     $slug=required_string($data,'slug'); $nome=required_string($data,'nome'); $cpf=normalize_cpf($data['cpf']??''); $email=trim((string)($data['email']??'')); $telefone=required_string($data,'telefone'); $date=required_string($data,'data_consulta');
-    if(!valid_cpf($cpf)||!filter_var($email,FILTER_VALIDATE_EMAIL)||!valid_date($date)) json_response(['success'=>false,'message'=>'Informe seus dados e uma data válida.'],422);
+    if(!valid_cpf($cpf)||!filter_var($email,FILTER_VALIDATE_EMAIL)||!valid_date($date)||$date<date('Y-m-d')) json_response(['success'=>false,'message'=>'Informe seus dados e uma data futura válida.'],422);
     $q=$pdo->prepare("SELECT id,nome,limite_diario,confirmacao_automatica FROM profissionais WHERE slug=? AND status='ativo'"); $q->execute([$slug]); $pro=$q->fetch(); if(!$pro) json_response(['success'=>false,'message'=>'Clínica não encontrada.'],404);
-    $q=$pdo->prepare("SELECT COUNT(*) FROM consultas_profissionais WHERE profissional_id=? AND data_consulta=? AND status NOT IN ('cancelada','faltou')"); $q->execute([$pro['id'],$date]); $ocupadas=(int)$q->fetchColumn();
-    if($ocupadas < max(1,(int)$pro['limite_diario'])) json_response(['success'=>false,'message'=>'Já existe uma vaga disponível para esta data. Volte e faça o agendamento normalmente.'],409);
+    if(professional_slots($pdo,(int)$pro['id'],$date)!==[]) json_response(['success'=>false,'message'=>'Já existe uma vaga disponível para esta data. Volte e faça o agendamento normalmente.'],409);
     $q=$pdo->prepare('SELECT p.id,p.sus FROM pacientes p INNER JOIN profissional_pacientes pp ON pp.paciente_id=p.id AND pp.profissional_id=? WHERE p.cpf=? LIMIT 1'); $q->execute([$pro['id'],$cpf]); $pat=$q->fetch();
     if(!$pat){ enforce_professional_patient_limit($pdo,(int)$pro['id']); $synthetic='CLI-'.$pro['id'].'-'.bin2hex(random_bytes(8)); $q=$pdo->prepare('INSERT INTO pacientes (nome,telefone,email,cpf,sus,ubs_id) VALUES (?,?,?,?,?,NULL)'); $q->execute([$nome,$telefone,$email,$cpf,$synthetic]); $patientId=(int)$pdo->lastInsertId(); }
     else { $patientId=(int)$pat['id']; enforce_professional_patient_limit($pdo,(int)$pro['id'],$patientId); $q=$pdo->prepare('UPDATE pacientes SET nome=?,telefone=?,email=? WHERE id=?'); $q->execute([$nome,$telefone,$email,$patientId]); }
@@ -661,6 +661,12 @@ function promote_professional_waitlist(PDO $pdo,int $professionalId,string $date
 }
 function professional_waitlist(PDO $pdo): never {
     $s=require_professional();$q=$pdo->prepare('SELECT l.id,l.data_consulta AS data,l.criado_em AS criadoEm,p.codigo,p.nome,p.telefone FROM lista_espera_profissionais l INNER JOIN pacientes p ON p.id=l.paciente_id WHERE l.profissional_id=? AND l.status="pendente" ORDER BY l.data_consulta,l.id');$q->execute([$s['id']]);json_response(['success'=>true,'waitlist'=>$q->fetchAll()]);
+}
+function professional_cancel_waitlist(PDO $pdo,array $data): never {
+    $s=require_professional();$id=(int)($data['id']??0);if($id<1)json_response(['success'=>false,'message'=>'Item da lista de espera não informado.'],422);
+    $q=$pdo->prepare("UPDATE lista_espera_profissionais SET status='cancelado' WHERE id=? AND profissional_id=? AND status='pendente'");$q->execute([$id,$s['id']]);
+    if($q->rowCount()===0)json_response(['success'=>false,'message'=>'Este item não está mais pendente ou não pertence à sua clínica.'],409);
+    audit_professional_event($pdo,(int)$s['id'],'lista_espera_cancelada','lista_espera_profissionais',(string)$id);json_response(['success'=>true,'message'=>'Paciente removido da lista de espera.']);
 }
 function professional_update_appointment(PDO $pdo,array $data): never {
     $s=require_professional();$id=required_string($data,'id');$pdo->beginTransaction();
@@ -2097,7 +2103,7 @@ function professional_resend_verification(PDO $pdo,array $data): never {
     auth_record_failure($pdo,$key);json_response(['success'=>true,'message'=>'Se houver uma conta pendente para esse e-mail, enviaremos um novo link.']);
 }
 function professional_request_password_reset(PDO $pdo,array $data): never {
-    $email=strtolower(trim((string)($data['email']??'')));$key=auth_attempt_key('redefinir_senha',$email);if(auth_is_limited($pdo,$key))json_response(['success'=>false,'message'=>'Muitas solicitações. Aguarde 15 minutos.'],429);
+    $email=strtolower(trim((string)($data['email']??'')));if(!filter_var($email,FILTER_VALIDATE_EMAIL))json_response(['success'=>false,'message'=>'Informe um e-mail profissional válido.'],422);if(!email_delivery_configured())json_response(['success'=>false,'message'=>'A recuperação de senha está temporariamente indisponível porque o envio de e-mails ainda não foi configurado no servidor.'],503);$key=auth_attempt_key('redefinir_senha',$email);if(auth_is_limited($pdo,$key))json_response(['success'=>false,'message'=>'Muitas solicitações. Aguarde 15 minutos.'],429);
     $q=$pdo->prepare("SELECT id,email,nome FROM profissionais WHERE email=? AND status IN ('ativo','pendente')");$q->execute([$email]);$p=$q->fetch();
     if($p){try{send_professional_token($pdo,(int)$p['id'],'redefinir_senha',$p['email'],$p['nome']);}catch(Throwable $e){error_log('Falha no pedido de redefinição: '.$e->getMessage());}}
     auth_record_failure($pdo,$key);json_response(['success'=>true,'message'=>'Se o e-mail estiver cadastrado, enviaremos instruções para redefinir a senha.']);
