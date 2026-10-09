@@ -195,12 +195,24 @@ async function api(action, options = {}) {
     }
     if (data.csrf_token) csrfToken = data.csrf_token;
     if (response.status === 419) csrfToken = null;
+    if (response.status === 401 && action.startsWith("professional_") && !["professional_login", "professional_register", "professional_me", "professional_verify_email", "professional_request_password_reset", "professional_reset_password"].includes(action)) {
+        invalidarSessaoProfissional(data.message || "A sessão da clínica expirou. Entre novamente para continuar.");
+    }
     if (!response.ok || data.success === false) {
         const error = new Error(data.message || "Erro no servidor.");
         error.data = { ...data, httpStatus: response.status };
         throw error;
     }
     return data;
+}
+
+function invalidarSessaoProfissional(message) {
+    professionalSession = null;
+    atualizarLinkPublicoClinica("");
+    if (document.body?.dataset.portal === "clinica" && typeof abrirLoginProfissional === "function") {
+        abrirLoginProfissional();
+        toast(message);
+    }
 }
 async function apiWithTransientRetry(action, options = {}) {
     for (let attempt = 0; attempt < 2; attempt++) {

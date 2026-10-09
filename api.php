@@ -41,7 +41,10 @@ try {
         case 'professional_link_patient': professional_link_patient($pdo, body_json()); break;
         case 'professional_patients': professional_patients($pdo); break;
         case 'professional_create_patient': professional_create_patient($pdo, body_json()); break;
+        case 'professional_update_patient': professional_update_patient($pdo, body_json()); break;
         case 'professional_patient_history': professional_patient_history($pdo); break;
+        case 'professional_records': professional_records($pdo); break;
+        case 'professional_create_record': professional_create_record($pdo, body_json()); break;
         case 'professional_finance': professional_finance($pdo); break;
         case 'professional_daily_report': professional_daily_report($pdo); break;
         case 'asaas_webhook': asaas_webhook($pdo); break;
@@ -2119,7 +2122,7 @@ function public_clinic_manage(PDO $pdo,array $data): never {
         if(in_array($a['status'],['cancelada','atendida','faltou'],true)){$pdo->rollBack();json_response(['success'=>false,'message'=>'Este agendamento não pode mais ser alterado.'],409);}
         if($operation==='cancel'){
             if(!appointment_policy_allows($a['data_consulta'],substr((string)$a['horario'],0,5),(int)$a['cancelamento_ate_horas'])){$pdo->rollBack();json_response(['success'=>false,'message'=>'O prazo para cancelamento on-line expirou. Entre em contato com a clínica.'],409);}
-            $pdo->prepare("UPDATE consultas_profissionais SET status='cancelada',cancelamento_motivo='Cancelamento solicitado pelo paciente' WHERE id=?")->execute([$a['id']]);$pdo->commit();audit_professional_event($pdo,(int)$a['profissional_id'],'consulta_cancelada_pelo_paciente','consultas_profissionais',(string)$a['id']);try{promote_professional_waitlist($pdo,(int)$a['profissional_id'],$a['data_consulta'],substr((string)$a['horario'],0,5));}catch(Throwable $waitError){error_log('Falha ao processar lista de espera após cancelamento: '.$waitError->getMessage());}try{promote_professional_waitlist($pdo,(int)$a['profissional_id'],$a['data_consulta'],substr((string)$a['horario'],0,5));}catch(Throwable $waitError){error_log('Falha ao processar lista de espera após cancelamento: '.$waitError->getMessage());}
+            $pdo->prepare("UPDATE consultas_profissionais SET status='cancelada',cancelamento_motivo='Cancelamento solicitado pelo paciente' WHERE id=?")->execute([$a['id']]);$pdo->commit();audit_professional_event($pdo,(int)$a['profissional_id'],'consulta_cancelada_pelo_paciente','consultas_profissionais',(string)$a['id']);try{promote_professional_waitlist($pdo,(int)$a['profissional_id'],$a['data_consulta'],substr((string)$a['horario'],0,5));}catch(Throwable $waitError){error_log('Falha ao processar lista de espera após cancelamento: '.$waitError->getMessage());}
             $q=$pdo->prepare('SELECT p.nome,p.email FROM consultas_profissionais c INNER JOIN pacientes p ON p.id=c.paciente_id WHERE c.id=?');$q->execute([$a['id']]);$patient=$q->fetch();if($patient&&!empty($patient['email'])){try{send_appointment_email($patient['email'],$patient['nome'],$a['clinica'],$a['data_consulta'],substr((string)$a['horario'],0,5),'cancelada',(string)$a['id'],'');}catch(Throwable $e){error_log('Falha ao enviar cancelamento: '.$e->getMessage());}}
             json_response(['success'=>true,'message'=>'Consulta cancelada.']);
         }
