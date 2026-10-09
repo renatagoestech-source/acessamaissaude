@@ -86,12 +86,15 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
         if (!$columnExists($table, $column)) $pdo->exec('ALTER TABLE `'.$table.'` ADD COLUMN `'.$column.'` '.$definition);
     };
 
+    // Bases antigas podem não conter os limites adicionados depois da instalação inicial.
+    $addColumn('ubs', 'limite_diario', 'INT UNSIGNED NOT NULL DEFAULT 12 AFTER usuario');
     $addColumn('pacientes', 'email', 'VARCHAR(180) NULL AFTER telefone');
     $addColumn('profissionais', 'slug', 'VARCHAR(160) NULL AFTER email');
     $addColumn('profissionais', 'cnpj', 'VARCHAR(30) NULL AFTER slug');
     $addColumn('profissionais', 'horario_funcionamento', 'VARCHAR(180) NULL AFTER logo_arquivo');
     $addColumn('profissionais', 'aviso_publico', 'TEXT NULL AFTER horario_funcionamento');
     $addColumn('profissionais', 'mensagem_pos_venda', 'TEXT NULL AFTER aviso_publico');
+    $addColumn('profissionais', 'limite_diario', 'INT UNSIGNED NOT NULL DEFAULT 12 AFTER mensagem_pos_venda');
     try { $pdo->exec("UPDATE profissionais SET slug = CONCAT('profissional-', id) WHERE slug IS NULL OR slug = ''"); $pdo->exec("ALTER TABLE profissionais MODIFY slug VARCHAR(160) NOT NULL UNIQUE"); } catch (Throwable $ignored) {}
     $addColumn('consultas', 'assunto', 'TEXT NULL AFTER especialidade');
     $addColumn('consultas', 'cancelamento_motivo', 'VARCHAR(255) NULL AFTER status');
@@ -118,7 +121,15 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
     $pdo->exec("CREATE TABLE IF NOT EXISTS profissional_pacientes (profissional_id INT UNSIGNED NOT NULL, paciente_id INT UNSIGNED NOT NULL, consentimento_em DATETIME NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (profissional_id,paciente_id)) ENGINE=InnoDB");
     $pdo->exec("CREATE TABLE IF NOT EXISTS agendas_profissionais (id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY, profissional_id INT UNSIGNED NOT NULL, dia_semana TINYINT UNSIGNED NOT NULL, inicio TIME NOT NULL, fim TIME NOT NULL, duracao_minutos SMALLINT UNSIGNED NOT NULL DEFAULT 30, ativo TINYINT(1) NOT NULL DEFAULT 1, UNIQUE KEY uq_agenda_profissional (profissional_id,dia_semana,inicio,fim)) ENGINE=InnoDB");
     $pdo->exec("CREATE TABLE IF NOT EXISTS consultas_profissionais (id VARCHAR(60) PRIMARY KEY, profissional_id INT UNSIGNED NOT NULL, paciente_id INT UNSIGNED NOT NULL, data_consulta DATE NOT NULL, horario TIME NOT NULL, assunto TEXT NULL, valor DECIMAL(10,2) NULL, forma_pagamento VARCHAR(40) NULL, pagamento_status ENUM('pendente','pago','dispensado') NOT NULL DEFAULT 'pendente', pago_em DATETIME NULL, status ENUM('solicitada','agendada','confirmada','atendida','cancelada','faltou') NOT NULL DEFAULT 'solicitada', cancelamento_motivo VARCHAR(255) NULL, confirmada_em DATETIME NULL, atendida_em DATETIME NULL, criada_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_cp_prof_data (profissional_id,data_consulta,horario), INDEX idx_cp_paciente (paciente_id,data_consulta)) ENGINE=InnoDB");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS pagamentos_pacientes (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, profissional_id INT UNSIGNED NOT NULL, paciente_id INT UNSIGNED NOT NULL, consulta_id VARCHAR(60) NULL, valor DECIMAL(10,2) NOT NULL, forma_pagamento VARCHAR(40) NOT NULL, tipo_cartao VARCHAR(20) NULL, parcelas TINYINT UNSIGNED NULL, recebido_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uq_pagamento_consulta (consulta_id), INDEX idx_fin_prof_data (profissional_id,recebido_em), INDEX idx_fin_paciente (paciente_id,recebido_em)) ENGINE=InnoDB");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS relacionamento_contatos (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, profissional_id INT UNSIGNED NOT NULL, paciente_id INT UNSIGNED NOT NULL, canal ENUM('whatsapp') NOT NULL DEFAULT 'whatsapp', mensagem TEXT NOT NULL, enviado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, INDEX idx_rel_prof_paciente (profissional_id,paciente_id,enviado_em)) ENGINE=InnoDB");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS notificacoes_profissionais (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, profissional_id INT UNSIGNED NOT NULL, paciente_id INT UNSIGNED NOT NULL, consulta_id VARCHAR(60) NOT NULL, tipo ENUM('confirmacao','lembrete','lista_espera_agendada') NOT NULL, canal ENUM('whatsapp','email') NOT NULL DEFAULT 'whatsapp', mensagem TEXT NOT NULL, agendada_para DATETIME NOT NULL, enviada_em DATETIME NULL, status ENUM('pendente','enviada','erro') NOT NULL DEFAULT 'pendente', criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uq_notif_prof_consulta_tipo (consulta_id,tipo), INDEX idx_notif_prof_agendada (profissional_id,status,agendada_para)) ENGINE=InnoDB");
     $addColumn('consultas_profissionais', 'forma_pagamento', 'VARCHAR(40) NULL AFTER valor');
+    $addColumn('consultas_profissionais', 'tipo_cartao', 'VARCHAR(20) NULL AFTER forma_pagamento');
+    $addColumn('consultas_profissionais', 'parcelas', 'TINYINT UNSIGNED NULL AFTER tipo_cartao');
+    $addColumn('consultas_profissionais', 'recibo_valor', 'DECIMAL(10,2) NULL AFTER parcelas');
+    $addColumn('pagamentos_pacientes', 'tipo_cartao', 'VARCHAR(20) NULL AFTER forma_pagamento');
+    $addColumn('pagamentos_pacientes', 'parcelas', 'TINYINT UNSIGNED NULL AFTER tipo_cartao');
     $addColumn('consultas_profissionais', 'pagamento_status', "ENUM('pendente','pago','dispensado') NOT NULL DEFAULT 'pendente' AFTER forma_pagamento");
     $addColumn('consultas_profissionais', 'pago_em', 'DATETIME NULL AFTER pagamento_status');
     $addColumn('consultas_profissionais', 'confirmada_em', 'DATETIME NULL AFTER cancelamento_motivo');
