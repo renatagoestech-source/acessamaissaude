@@ -2940,6 +2940,7 @@ function previewProfessionalLogo(input){
     const reader=new FileReader();reader.onload=()=>definirPreviewLogoProfissional(String(reader.result||''));reader.readAsDataURL(file);
 }
 async function carregarPerfilProfissional(){
+    void carregarAgendaSemanal();
     try{
         const d=await api('professional_me'),p=d.professional||{};
         const map={nome:'profSetNome',cnpj:'profSetCnpj',especialidade:'profSetEspecialidade',registroProfissional:'profSetRegistro',telefone:'profSetTelefone',whatsapp:'profSetWhatsapp',modalidade:'profSetModalidade',horarioFuncionamento:'profSetHorario',valorConsulta:'profSetValor',endereco:'profSetEndereco',apresentacao:'profSetApresentacao',avisoPublico:'profSetAviso',mensagemPosVenda:'relMensagemPadrao',corPrimaria:'profSetCor',limiteDiario:'profSetLimiteDiario'};
@@ -2950,7 +2951,6 @@ async function carregarPerfilProfissional(){
         professionalSession={...professionalSession,nome:p.nome,slug:p.slug};
         atualizarLinkPublicoClinica(p.slug);
         definirPreviewLogoProfissional(p.logoArquivo?appPath('/uploads/marca/'+encodeURIComponent(p.logoArquivo)):appPath('/img/logo-transparent.png'));
-        await carregarAgendaSemanal();
     }catch(e){
         if(professionalSession?.slug)atualizarLinkPublicoClinica(professionalSession.slug);
         else atualizarLinkPublicoClinica('');
@@ -3024,7 +3024,28 @@ function alternarDiaExpediente(day,active){
     const tab=box.querySelector(`[data-schedule-tab="${day}"]`);if(tab)tab.classList.toggle('is-open',active);
     atualizarResumoAgendaSemanal();
 }
-async function carregarAgendaSemanal(){try{const d=await api('professional_schedule');desenharAgendaSemanal(d.schedule||[]);}catch(e){const box=$('professionalScheduleEditor'),status=$('professionalScheduleStatus');if(box)box.innerHTML='<div class="info-box">Não foi possível carregar o expediente. Tente novamente antes de editar.</div>';if(status)status.textContent='Expediente indisponível; não salve uma grade vazia.';toast(e.message);}}
+async function carregarAgendaSemanal(){
+    const box=$('professionalScheduleEditor'),status=$('professionalScheduleStatus');
+    if(!box)return;
+    let controller=null,timeoutId=null;
+    if(status)status.textContent='Carregando expediente semanal…';
+    try{
+        if(typeof AbortController==='function'){
+            controller=new AbortController();
+            timeoutId=setTimeout(()=>controller.abort(),15000);
+        }
+        const d=await api('professional_schedule',controller?{signal:controller.signal}:{});
+        if(!Array.isArray(d.schedule))throw new Error('O servidor retornou uma resposta inválida para o expediente.');
+        desenharAgendaSemanal(d.schedule);
+    }catch(e){
+        const message=controller?.signal.aborted?'O carregamento do expediente demorou mais de 15 segundos. Tente novamente.':(e?.message||'Não foi possível carregar o expediente.');
+        box.innerHTML='<div class="info-box schedule-load-error" role="alert"><strong>Não foi possível carregar o expediente.</strong><p>Verifique sua conexão e tente novamente.</p><button type="button" class="btn secondary" onclick="carregarAgendaSemanal()">Tentar novamente</button></div>';
+        if(status)status.textContent=message;
+        toast(message);
+    }finally{
+        if(timeoutId!==null)clearTimeout(timeoutId);
+    }
+}
 function dadosAgendaSemanal(){
     const box=$('professionalScheduleEditor');
     if(!box)throw new Error('Abra “Minha marca” e aguarde a grade semanal carregar.');

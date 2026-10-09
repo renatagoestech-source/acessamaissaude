@@ -95,6 +95,10 @@ function testClinicScheduleOverview() {
   const scheduleStart = js.indexOf('const diasAgendaProfissional=');
   const scheduleEnd = js.indexOf('\nasync function salvarPerfilProfissional()', scheduleStart);
   assert(scheduleStart >= 0 && scheduleEnd > scheduleStart, 'O editor de expediente deve carregar e salvar sua grade semanal.');
+  const profileStart = js.indexOf('async function carregarPerfilProfissional()');
+  const profileEnd = js.indexOf('\nconst diasAgendaProfissional=', profileStart);
+  const profileSource = js.slice(profileStart, profileEnd);
+  assert(profileSource.indexOf('void carregarAgendaSemanal()') >= 0 && profileSource.indexOf('void carregarAgendaSemanal()') < profileSource.indexOf("api('professional_me')"), 'A grade deve começar a carregar antes do perfil, para um erro no perfil não deixá-la presa no carregamento.');
 
   const summary = { textContent: '', classList: { toggle() {} } };
   const box = { innerHTML: '', querySelector() { return null; }, querySelectorAll() { return []; } };
@@ -127,6 +131,47 @@ assert.match(html, /hash_file\('sha256'/, 'Os assets devem usar fingerprints de 
 assert.match(html, /duração da consulta e pausa opcional[\s\S]*Salvar expediente e pausas semanais/);
 assert.match(css, /\.schedule-tab-hours/);
 console.log('Editor semanal e cache de assets da clínica: OK');
+
+async function testScheduleLoadingStates() {
+  const start = js.indexOf('const diasAgendaProfissional=');
+  const end = js.indexOf('\nasync function salvarPerfilProfissional()', start);
+  function createContext(api) {
+    const box = { innerHTML: '', querySelector() { return null; }, querySelectorAll() { return []; } };
+    const summary = { textContent: 'Carregando expediente semanal…', classList: { toggle() {} } };
+    let timeoutMs = 0;
+    let toastMessage = '';
+    const context = {
+      $: id => id === 'professionalScheduleEditor' ? box : id === 'professionalScheduleStatus' ? summary : null,
+      api,
+      AbortController,
+      setTimeout(_callback, ms) { timeoutMs = ms; return 1; },
+      clearTimeout() {},
+      toast: message => { toastMessage = message; },
+      escapeAttr: value => String(value),
+      escapeHTML: value => String(value)
+    };
+    vm.runInNewContext(js.slice(start, end), context);
+    return { context, box, summary, get timeoutMs() { return timeoutMs; }, get toastMessage() { return toastMessage; } };
+  }
+
+  const success = createContext(async action => {
+    assert.equal(action, 'professional_schedule');
+    return { schedule: [] };
+  });
+  await success.context.carregarAgendaSemanal();
+  assert.equal(success.timeoutMs, 15000, 'A consulta deve ter limite para não manter o campo carregando indefinidamente.');
+  assert.match(success.box.innerHTML, /scheduleTab6/, 'Mesmo uma grade vazia deve renderizar os sete dias para permitir configurar um expediente.');
+  assert.match(success.box.innerHTML, /data-schedule-active="0"/);
+  assert.doesNotMatch(success.box.innerHTML, /Tentar novamente/);
+  assert.doesNotMatch(success.summary.textContent, /Carregando expediente/);
+
+  const failure = createContext(async () => { throw new Error('Sessão profissional expirada.'); });
+  await failure.context.carregarAgendaSemanal();
+  assert.match(failure.box.innerHTML, /Tentar novamente/, 'Falha de carga deve oferecer nova tentativa, não deixar o placeholder.');
+  assert.match(failure.summary.textContent, /Sessão profissional expirada/);
+  assert.match(failure.toastMessage, /Sessão profissional expirada/);
+  console.log('Carregamento independente do expediente, estado vazio e retry: OK');
+}
 
 async function testPatientCampaigns() {
   const start = js.indexOf('async function mostrarAvisos(');
@@ -167,7 +212,12 @@ async function testPatientCampaigns() {
   console.log('Campanhas e eventos atualizados para a UBS do paciente: OK');
 }
 
-testPatientCampaigns().catch(error => {
+async function runAsyncTests() {
+  await testScheduleLoadingStates();
+  await testPatientCampaigns();
+}
+
+runAsyncTests().catch(error => {
   console.error(error);
   process.exitCode = 1;
 });
