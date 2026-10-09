@@ -110,8 +110,12 @@ document.addEventListener("DOMContentLoaded", async function () {
     } else if (databaseReady && portal === "clinica") {
         definirModoUsuario(false);
         window.clinicLoginReturnPath = "/clinica";
-        mostrarApenas("portalChooserSection");
-        abrirLoginProfissional();
+        if (await restaurarSessaoProfissional()) {
+            await abrirPortalProfissional("dashboard");
+        } else {
+            mostrarApenas("portalChooserSection");
+            abrirLoginProfissional();
+        }
     } else if (pacienteSalvo && databaseReady) {
         definirModoUsuario(true);
         preencherDadosPaciente(pacienteSalvo);
@@ -2726,6 +2730,21 @@ async function cancelarAgendamentoPublico(){if(!confirm('Cancelar esta consulta?
 async function remarcarAgendamentoPublico(){const data=$('publicManageDate')?.value,horario=$('publicManageTime')?.value;if(!data||!horario){toast('Escolha uma nova data e um horário livre.');return;}try{const d=await api('public_clinic_manage',{method:'POST',body:{token:clinicManagementToken,operation:'reschedule',data_consulta:data,horario}});toast(d.message);await carregarGerenciamentoClinica();}catch(e){toast(e.message);}}
 async function copiarLinkGerenciamento(){const url=location.origin+location.pathname+'?clinica='+encodeURIComponent(window.publicClinicSlug)+'&gerenciar='+encodeURIComponent(clinicManagementToken||'');try{await navigator.clipboard.writeText(url);toast('Link de gerenciamento copiado. Guarde-o em local privado.');}catch(_e){prompt('Copie e guarde este link privado:',url);}}
 
+
+async function restaurarSessaoProfissional() {
+    try {
+        const data = await apiWithTransientRetry("professional_me");
+        if (!data.professional || !data.professional.id) return false;
+        professionalSession = data.professional;
+        atualizarLinkPublicoClinica(data.professional.slug || "");
+        return true;
+    } catch (error) {
+        if (Number(error?.data?.httpStatus || 0) !== 401) {
+            toast(error?.message || "Não foi possível verificar a sessão profissional.");
+        }
+        return false;
+    }
+}
 
 function abrirLoginProfissional(){
     fecharLogin();

@@ -267,9 +267,55 @@ async function testStartupRetryAndErrorMessage() {
   console.log('Retry do bootstrap e mensagem de erro precisa: OK');
 }
 
+async function testProfessionalSessionRestoration() {
+  const start = js.indexOf('async function restaurarSessaoProfissional()');
+  const end = js.indexOf('\nfunction abrirLoginProfissional()', start);
+  assert(start >= 0 && end > start, 'O portal deve consultar a sessão profissional persistida ao reabrir.');
+  let requestedAction = '';
+  let publicSlug = '';
+  const restored = {
+    professionalSession: null,
+    apiWithTransientRetry: async action => {
+      requestedAction = action;
+      return { professional: { id: 27, nome: 'Clínica de teste', slug: 'clinica-teste' } };
+    },
+    atualizarLinkPublicoClinica: slug => { publicSlug = slug; },
+    toast() {}
+  };
+  vm.runInNewContext(js.slice(start, end), restored);
+  assert.equal(await restored.restaurarSessaoProfissional(), true);
+  assert.equal(requestedAction, 'professional_me');
+  assert.equal(restored.professionalSession.id, 27, 'A resposta da sessão deve repor o estado profissional no frontend.');
+  assert.equal(publicSlug, 'clinica-teste');
+
+  let toastShown = false;
+  const unauthenticated = {
+    professionalSession: null,
+    apiWithTransientRetry: async () => {
+      const error = new Error('Sessão profissional expirada. Faça login novamente.');
+      error.data = { httpStatus: 401 };
+      throw error;
+    },
+    atualizarLinkPublicoClinica() {},
+    toast() { toastShown = true; }
+  };
+  vm.runInNewContext(js.slice(start, end), unauthenticated);
+  assert.equal(await unauthenticated.restaurarSessaoProfissional(), false);
+  assert.equal(toastShown, false, 'Sessão ausente deve abrir o login normalmente, sem alerta falso de erro.');
+
+  const bootStart = js.indexOf('document.addEventListener("DOMContentLoaded", async function ()');
+  const clinicStart = js.indexOf('} else if (databaseReady && portal === "clinica") {', bootStart);
+  const patientStart = js.indexOf('} else if (pacienteSalvo && databaseReady)', clinicStart);
+  assert(clinicStart >= 0 && patientStart > clinicStart, 'A rota clínica deve manter seu ramo separado do cadastro do paciente.');
+  assert.match(js.slice(clinicStart, patientStart), /await restaurarSessaoProfissional\(\)/, 'A restauração deve acontecer ao abrir a rota clínica.');
+  assert.match(js.slice(clinicStart, patientStart), /await abrirPortalProfissional\("dashboard"\)/, 'Uma sessão válida deve abrir o portal em vez do formulário de login.');
+  console.log('Restauração automática da sessão clínica após reabrir: OK');
+}
+
 async function runAsyncTests() {
   await testScheduleLoadingStates();
   await testStartupRetryAndErrorMessage();
+  await testProfessionalSessionRestoration();
   await testPatientCampaigns();
 }
 
