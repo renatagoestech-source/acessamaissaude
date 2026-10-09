@@ -2,7 +2,10 @@
 declare(strict_types=1);
 require_once __DIR__ . '/common.php';
 require_once __DIR__ . '/config.php';
-configure_secure_session();
+$action = is_string($_GET['action'] ?? null) ? $_GET['action'] : '';
+$isProfessionalAction = str_starts_with($action, 'professional_');
+$professionalSessionLifetime = max(SESSION_ABSOLUTE_TIMEOUT, (int)ini_get('session.gc_maxlifetime'));
+configure_secure_session($isProfessionalAction ? $professionalSessionLifetime : 0);
 ob_start();
 try {
     $pdo = db();
@@ -10,7 +13,7 @@ try {
     if (!session_start()) throw new RuntimeException('Não foi possível iniciar a sessão segura.');
     enforce_session_lifetime();
     validate_professional_session($pdo);
-    $action = $_GET['action'] ?? '';
+    if ($isProfessionalAction) refresh_professional_session_cookie();
     // As ações da clínica usam autenticação profissional; UBS e demais POSTs mantêm CSRF.
     $requiresCsrf = $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'asaas_webhook' && !str_starts_with((string)$action, 'professional_');
     if ($requiresCsrf) require_csrf();

@@ -34,4 +34,30 @@ if (str_contains($validator, 'email_verificado_em')) {
     throw new RuntimeException('A ausência do timestamp de verificação não deve invalidar sessão autenticada.');
 }
 
+configure_secure_session(0);
+if ((int)session_get_cookie_params()['lifetime'] !== 0) {
+    throw new RuntimeException('Rotas não profissionais devem manter o cookie de sessão atual.');
+}
+configure_secure_session(SESSION_ABSOLUTE_TIMEOUT);
+if ((int)session_get_cookie_params()['lifetime'] !== SESSION_ABSOLUTE_TIMEOUT) {
+    throw new RuntimeException('A sessão profissional deve usar cookie persistente alinhado ao prazo do servidor.');
+}
+
+$apiBootstrap = substr($api, 0, strpos($api, 'switch ($action)') ?: strlen($api));
+$validationPosition = strpos($apiBootstrap, 'validate_professional_session($pdo);');
+$cookieRefreshPosition = strpos($apiBootstrap, 'refresh_professional_session_cookie();');
+if ($validationPosition === false || $cookieRefreshPosition === false || $cookieRefreshPosition <= $validationPosition) {
+    throw new RuntimeException('O cookie profissional deve ser renovado somente após a validação da conta.');
+}
+
+ini_set('session.use_cookies', '0');
+if (!session_start()) {
+    throw new RuntimeException('A sessão do teste de cookie não iniciou.');
+}
+$_SESSION['professional'] = ['id' => 42, 'auth_version' => 1];
+if (!refresh_professional_session_cookie()) {
+    throw new RuntimeException('O cookie persistente da sessão profissional não pôde ser renovado.');
+}
+session_abort();
+
 echo "Professional session tests: OK\n";

@@ -4,23 +4,52 @@ declare(strict_types=1);
 const SESSION_IDLE_TIMEOUT = 1800;
 const SESSION_ABSOLUTE_TIMEOUT = 28800;
 
-function configure_secure_session(): void
+function configure_secure_session(int $cookieLifetime = 0): void
 {
+    $cookieLifetime = max(0, $cookieLifetime);
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
     ini_set('session.cookie_httponly', '1');
     ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.cookie_lifetime', (string)$cookieLifetime);
     $https = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
         || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')
         || getenv('VERCEL') === '1';
     session_set_cookie_params([
-        'lifetime' => 0,
+        'lifetime' => $cookieLifetime,
         'path' => '/',
         'secure' => $https,
         'httponly' => true,
         'samesite' => 'Lax',
     ]);
     date_default_timezone_set('America/Sao_Paulo');
+}
+
+/** Renova o cookie persistente somente enquanto houver uma sessão profissional válida. */
+function refresh_professional_session_cookie(): bool
+{
+    if (session_status() !== PHP_SESSION_ACTIVE || empty($_SESSION['professional']) || headers_sent()) {
+        return false;
+    }
+
+    $params = session_get_cookie_params();
+    $lifetime = (int)($params['lifetime'] ?? 0);
+    if ($lifetime <= 0) {
+        return false;
+    }
+
+    $options = [
+        'expires' => time() + $lifetime,
+        'path' => ($params['path'] ?? '') !== '' ? $params['path'] : '/',
+        'secure' => (bool)($params['secure'] ?? false),
+        'httponly' => true,
+        'samesite' => ($params['samesite'] ?? '') !== '' ? $params['samesite'] : 'Lax',
+    ];
+    if (!empty($params['domain'])) {
+        $options['domain'] = $params['domain'];
+    }
+
+    return setcookie(session_name(), session_id(), $options);
 }
 
 /** Persiste sessões PHP em Supabase para que funcionem entre invocações serverless. */
