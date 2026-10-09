@@ -105,14 +105,19 @@ function testClinicScheduleOverview() {
   };
   vm.runInNewContext(js.slice(scheduleStart, scheduleEnd), context);
   const rows = [
-    { dia: 0, ativo: 't', inicio: '08:00', fim: '17:00', duracao: 30, pausaInicio: '', pausaFim: '' },
+    { dia: 0, ativo: 't', inicio: '08:00', fim: '17:00', duracao: 30, pausainicio: '12:00', pausafim: '13:00' },
     { dia: 1, ativo: false, inicio: '09:00', fim: '17:00', duracao: 30, pausaInicio: '', pausaFim: '' }
   ];
+  const normalizedPause = context.normalizarAgendaSemanal(rows)[0];
+  assert.equal(normalizedPause.pausaInicio, '12:00', 'Alias PostgreSQL minúsculo deve restaurar o início da pausa ao editar.');
+  assert.equal(normalizedPause.pausaFim, '13:00', 'Alias PostgreSQL minúsculo deve restaurar o fim da pausa ao editar.');
   context.desenharAgendaSemanal(rows);
   assert.equal(context.agendaAtivo('t'), true, 'O valor booleano PostgreSQL t deve significar dia ativo.');
   assert.equal(context.agendaAtivo('false'), false);
   assert.match(box.innerHTML, /schedule-tab-hours/);
   assert.match(box.innerHTML, /08:00–17:00/);
+  assert.match(box.innerHTML, /value="12:00"/);
+  assert.match(box.innerHTML, /value="13:00"/);
   assert.match(box.innerHTML, /Fechado/);
   assert.equal(typeof box.oninput, 'function', 'Alterar horários deve atualizar o resumo sem recarregar a tela.');
 }

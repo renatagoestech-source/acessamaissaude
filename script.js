@@ -2959,7 +2959,15 @@ async function carregarPerfilProfissional(){
 }
 const diasAgendaProfissional=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 function agendaAtivo(value){return value===true||value===1||['1','t','true','yes','on'].includes(String(value??'').trim().toLowerCase());}
+function normalizarAgendaSemanal(rows=[]){
+    if(!Array.isArray(rows))return [];
+    return rows.map(row=>{
+        const item=row&&typeof row==='object'?row:{};
+        return {...item,pausaInicio:item.pausaInicio??item.pausainicio??'',pausaFim:item.pausaFim??item.pausafim??''};
+    });
+}
 function desenharAgendaSemanal(rows=[]){
+    rows=normalizarAgendaSemanal(rows);
     const box=$('professionalScheduleEditor');
     if(!box)return;
     const previous=box.querySelector('[data-schedule-tab].is-selected');
