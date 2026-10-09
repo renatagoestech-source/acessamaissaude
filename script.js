@@ -2953,21 +2953,22 @@ async function carregarPerfilProfissional(){
     }catch(e){toast(e.message);}
 }
 const diasAgendaProfissional=['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
+function agendaAtivo(value){return value===true||value===1||['1','t','true','yes','on'].includes(String(value??'').trim().toLowerCase());}
 function desenharAgendaSemanal(rows=[]){
     const box=$('professionalScheduleEditor');
     if(!box)return;
     const previous=box.querySelector('[data-schedule-tab].is-selected');
-    const firstOpen=rows.find(row=>Number(row.ativo)===1||row.ativo===true);
+    const firstOpen=rows.find(row=>agendaAtivo(row.ativo));
     const selected=previous?Number(previous.dataset.scheduleTab):(firstOpen?Number(firstOpen.dia):0);
     const diasCurtos=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
     const diasLongos=['Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado','Domingo'];
     box.innerHTML=`<div class="schedule-editor">
         <div class="schedule-day-tabs" role="group" aria-label="Escolha o dia da semana">
-            ${diasAgendaProfissional.map((day,i)=>{const r=rows.find(x=>Number(x.dia)===i)||{};const active=(r.ativo===true||Number(r.ativo)===1);return `<button type="button" id="scheduleTab${i}" class="schedule-day-tab ${selected===i?'is-selected':''} ${active?'is-open':''}" data-schedule-tab="${i}" aria-controls="schedulePanel${i}" aria-pressed="${selected===i}" onclick="selecionarDiaExpediente(${i})"><span>${diasCurtos[i]}</span><i class="schedule-tab-dot" aria-hidden="true"></i></button>`;}).join('')}
+            ${diasAgendaProfissional.map((day,i)=>{const r=rows.find(x=>Number(x.dia)===i)||{};const active=agendaAtivo(r.ativo);const start=String(r.inicio||'09:00').slice(0,5),end=String(r.fim||'17:00').slice(0,5);const hours=active?`${start}–${end}`:'Fechado';return `<button type="button" id="scheduleTab${i}" class="schedule-day-tab ${selected===i?'is-selected':''} ${active?'is-open':''}" data-schedule-tab="${i}" aria-controls="schedulePanel${i}" aria-pressed="${selected===i}" onclick="selecionarDiaExpediente(${i})"><span>${diasCurtos[i]}</span><i class="schedule-tab-dot" aria-hidden="true"></i><small class="schedule-tab-hours">${escapeHTML(hours)}</small></button>`;}).join('')}
         </div>
         <div class="schedule-panels">${diasAgendaProfissional.map((day,i)=>{
             const r=rows.find(x=>Number(x.dia)===i)||{};
-            const active=(r.ativo===true||Number(r.ativo)===1);
+            const active=agendaAtivo(r.ativo);
             const disabled=active?'':'disabled';
             const start=String(r.inicio||'09:00').slice(0,5),end=String(r.fim||'17:00').slice(0,5);
             const duration=Number(r.duracao||30),breakStart=String(r.pausaInicio||'').slice(0,5),breakEnd=String(r.pausaFim||'').slice(0,5);
@@ -2981,14 +2982,21 @@ function desenharAgendaSemanal(rows=[]){
             </article>`;
         }).join('')}</div>
     </div>`;
+    box.oninput=event=>{if(event.target?.matches?.('[data-schedule-field]'))atualizarResumoAgendaSemanal();};
     atualizarResumoAgendaSemanal();
 }
 function atualizarResumoAgendaSemanal(){
     const box=$("professionalScheduleEditor"),summary=$("professionalScheduleStatus");
     if(!box||!summary)return;
-    const active=[...box.querySelectorAll("[data-schedule-active]")].filter(input=>input.checked).length;
-    summary.textContent=active?`Expediente habilitado em ${active} de 7 dias. Salve as alterações para atualizar os horários públicos.`:"Nenhum dia está ativo. Ative ao menos um dia para liberar horários no link público.";
-    summary.classList.toggle("is-empty",active===0);
+    const shortDays=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'],active=[];
+    box.querySelectorAll('[data-schedule-active]').forEach(input=>{
+        const day=Number(input.dataset.scheduleActive),tab=box.querySelector(`[data-schedule-tab="${day}"]`),preview=tab?.querySelector('.schedule-tab-hours');
+        const start=box.querySelector(`[data-schedule-start="${day}"]`)?.value||'',end=box.querySelector(`[data-schedule-end="${day}"]`)?.value||'';
+        if(input.checked){const hours=start&&end?`${start}–${end}`:'Defina os horários';if(preview)preview.textContent=hours;active.push(`${shortDays[day]} ${hours}`);}
+        else if(preview)preview.textContent='Fechado';
+    });
+    summary.textContent=active.length?`Dias ativos (${active.length}/7): ${active.join(' · ')}. Salve para atualizar os horários do link público.`:"Nenhum dia está ativo. Ative ao menos um dia para liberar horários no link público.";
+    summary.classList.toggle("is-empty",active.length===0);
 }
 function selecionarDiaExpediente(day){
     const box=$('professionalScheduleEditor');if(!box)return;
@@ -3036,7 +3044,7 @@ async function salvarAgendaSemanal(){
         const savedSchedule=Array.isArray(d.schedule)?d.schedule:[];
         if(savedSchedule.length!==dias.length)throw new Error('O servidor não confirmou o salvamento dos sete dias. Tente novamente.');
         desenharAgendaSemanal(savedSchedule);
-        const activeDays=savedSchedule.filter(row=>row.ativo===true||Number(row.ativo)===1||['t','true'].includes(String(row.ativo).toLowerCase())).length;
+        const activeDays=savedSchedule.filter(row=>agendaAtivo(row.ativo)).length;
         toast(activeDays?'Expediente, duração e pausas salvos.': 'Expediente salvo, mas nenhum dia está ativo; o link público não mostrará horários.');
     }catch(e){toast(e.message);}
     finally{if(button)button.disabled=false;}

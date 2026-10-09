@@ -83,6 +83,38 @@ assert.match(css, /#profAgenda \.calendar-toolbar/);
 assert.match(css, /@media\(max-width:520px\).*#professionalCalendar/);
 console.log('Link público da clínica e escopo do calendário: OK');
 
+function testClinicScheduleOverview() {
+  const scheduleStart = js.indexOf('const diasAgendaProfissional=');
+  const scheduleEnd = js.indexOf('\nasync function salvarPerfilProfissional()', scheduleStart);
+  assert(scheduleStart >= 0 && scheduleEnd > scheduleStart, 'O editor de expediente deve carregar e salvar sua grade semanal.');
+
+  const summary = { textContent: '', classList: { toggle() {} } };
+  const box = { innerHTML: '', querySelector() { return null; }, querySelectorAll() { return []; } };
+  const context = {
+    $: id => id === 'professionalScheduleEditor' ? box : id === 'professionalScheduleStatus' ? summary : null,
+    escapeAttr: value => String(value),
+    escapeHTML: value => String(value)
+  };
+  vm.runInNewContext(js.slice(scheduleStart, scheduleEnd), context);
+  const rows = [
+    { dia: 0, ativo: 't', inicio: '08:00', fim: '17:00', duracao: 30, pausaInicio: '', pausaFim: '' },
+    { dia: 1, ativo: false, inicio: '09:00', fim: '17:00', duracao: 30, pausaInicio: '', pausaFim: '' }
+  ];
+  context.desenharAgendaSemanal(rows);
+  assert.equal(context.agendaAtivo('t'), true, 'O valor booleano PostgreSQL t deve significar dia ativo.');
+  assert.equal(context.agendaAtivo('false'), false);
+  assert.match(box.innerHTML, /schedule-tab-hours/);
+  assert.match(box.innerHTML, /08:00–17:00/);
+  assert.match(box.innerHTML, /Fechado/);
+  assert.equal(typeof box.oninput, 'function', 'Alterar horários deve atualizar o resumo sem recarregar a tela.');
+}
+
+testClinicScheduleOverview();
+assert.match(html, /hash_file\('sha256'/, 'Os assets devem usar fingerprints de conteúdo para invalidar cache após mudanças.');
+assert.match(html, /duração da consulta e pausa opcional[\s\S]*Salvar expediente e pausas semanais/);
+assert.match(css, /\.schedule-tab-hours/);
+console.log('Editor semanal e cache de assets da clínica: OK');
+
 async function testPatientCampaigns() {
   const start = js.indexOf('async function mostrarAvisos(');
   const end = js.indexOf('async function verificarNotificacoes()', start);

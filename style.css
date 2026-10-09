@@ -187,3 +187,12 @@ body.clinic-login-route #appShell{display:none!important}
 #profAgenda #agendaDiaSelecionado{margin-top:12px;border:1px solid #d9ece9;background:#f2faf9}
 @media(max-width:800px){#profAgenda .calendar-toolbar{grid-template-columns:1fr 1fr}#profAgenda .calendar-toolbar h3{grid-column:1/-1;grid-row:1}#profAgenda .calendar-toolbar button:first-child{grid-column:1;grid-row:2}#profAgenda .calendar-toolbar button:last-child{grid-column:2;grid-row:2}#professionalCalendar .calendar-cell{min-height:56px;padding:3px}#professionalCalendar .calendar-event{display:none}}
 @media(max-width:520px){#profAgenda .calendar-toolbar{padding:9px;gap:8px}#profAgenda .calendar-toolbar .btn{padding:8px 6px;font-size:10px}#profAgenda .calendar-toolbar h3{min-width:0;font-size:15px}#profAgenda .calendar-legend{gap:6px}#profAgenda .calendar-legend span{padding:6px 8px;font-size:10px}#professionalCalendar .calendar-weekday{font-size:10px;padding:7px 1px}#professionalCalendar .calendar-cell{min-height:48px;padding:2px}#professionalCalendar .calendar-cell>b{width:20px;height:20px;font-size:11px}#professionalCalendar .calendar-cell>span{font-size:8px;padding:2px 4px}}
+
+/* Visão semanal do expediente: cada dia mostra de relance seu estado e faixa de horários. */
+.schedule-day-tab{display:grid;grid-template-columns:auto 8px;grid-template-rows:auto auto;justify-content:center;align-content:center;column-gap:6px;row-gap:3px;min-height:54px;padding:6px 5px}
+.schedule-day-tab>span{grid-column:1;grid-row:1}
+.schedule-day-tab>.schedule-tab-dot{grid-column:2;grid-row:1;justify-self:center}
+.schedule-tab-hours{grid-column:1/-1;grid-row:2;overflow:hidden;color:#718689;font-size:9px;font-weight:650;line-height:1.15;text-overflow:ellipsis;white-space:nowrap}
+.schedule-day-tab.is-selected .schedule-tab-hours{color:rgba(255,255,255,.88)}
+.schedule-summary{line-height:1.5;overflow-wrap:anywhere}
+@media(max-width:520px){.schedule-day-tab{min-height:52px;padding:6px 3px}.schedule-tab-hours{font-size:8px}}
