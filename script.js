@@ -171,10 +171,12 @@ function hojeISO() { const d=new Date(); return `${d.getFullYear()}-${String(d.g
 async function api(action, options = {}) {
     const params = options.params || {};
     const retriedCsrf = options.__retryCsrf === true;
+    const retriedProfessionalSession = options.__retryProfessionalSession === true;
     const query = new URLSearchParams({ action, ...params });
     const config = { ...options, headers: { ...(options.headers || {}) } };
     delete config.params;
     delete config.__retryCsrf;
+    delete config.__retryProfessionalSession;
     config.credentials = "same-origin";
     const method = String(config.method || "GET").toUpperCase();
     const csrfRequired = method === "POST" && action !== "asaas_webhook" && !action.startsWith("professional_");
@@ -196,6 +198,10 @@ async function api(action, options = {}) {
     if (data.csrf_token) csrfToken = data.csrf_token;
     if (response.status === 419) csrfToken = null;
     if (response.status === 401 && action.startsWith("professional_") && !["professional_login", "professional_register", "professional_me", "professional_verify_email", "professional_request_password_reset", "professional_reset_password"].includes(action)) {
+        if (!retriedProfessionalSession) {
+            await new Promise(resolve => setTimeout(resolve, 250));
+            return api(action, { ...options, __retryProfessionalSession: true });
+        }
         invalidarSessaoProfissional(data.message || "A sessão da clínica expirou. Entre novamente para continuar.");
     }
     if (!response.ok || data.success === false) {
