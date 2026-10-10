@@ -74,6 +74,10 @@ if ($appPortal !== '' && $requestPath !== $portalPath) {
                 </div>
             </div>
         </header>
+        <section id="notificationPanel" class="notification-panel hidden" aria-live="polite" aria-label="Notificações">
+            <div class="notification-panel-header"><h2>Notificações</h2><button type="button" class="close" onclick="fecharNotificacoes()" aria-label="Fechar notificações">×</button></div>
+            <div id="notificationList"></div>
+        </section>
 
         <main>
             <section class="card page-section" id="appLoadingSection" role="status" aria-live="polite" aria-busy="true">

@@ -1206,15 +1206,20 @@ async function verificarNotificacoes() {
             await Notification.requestPermission();
         }
         const data = await api("get_patient_notifications", {params:{sus:paciente.sus}});
-        const pendentes = (data.notifications || []).filter(n => n.status === "pendente");
+        const notificacoes = data.notifications || [];
+        const pendentes = notificacoes.filter(n => n.status === "pendente");
         const badge = $("notificationCount");
         if (badge) badge.textContent = String(pendentes.length);
+        const list = $("notificationList");
+        if (list) list.innerHTML = notificacoes.length ? notificacoes.map(n => `<article class="notification-item ${n.status === 'pendente' ? 'unread' : ''}"><strong>${escapeHTML(n.tipo || 'Notificação')}</strong><p>${escapeHTML(n.mensagem || '')}</p><small>${escapeHTML(n.agendadaPara || '')}</small></article>`).join('') : '<div class="info-box">Nenhuma notificação encontrada.</div>';
+        $("notificationPanel")?.classList.remove('hidden');
         if (pendentes.length && "Notification" in window && Notification.permission === "granted") {
             pendentes.slice(0,3).forEach(n => new Notification("Acessa+ Saúde", {body:n.mensagem}));
         }
-        toast(pendentes.length ? `${pendentes.length} notificação(ões) pendente(s).` : "Você não possui notificações pendentes.");
     } catch (error) { toast(error.message); }
 }
+
+function fecharNotificacoes() { $("notificationPanel")?.classList.add('hidden'); }
 
 function mostrarAjuda() { mostrarApenas("ajudaSection"); }
 
@@ -1681,7 +1686,7 @@ async function alternarUBSAtiva(){const unit=UBSAdminAtual();if(!unit)return;con
 
 async function carregarListaEsperaUBS(){const box=$("listaEsperaUBS");if(!box||!adminSession)return;try{const d=await api('admin_waitlist',{params:{ubs_id:adminSession.tipo==='ubs'?adminSession.ubsId:$('adminUBSSelect').value}});box.innerHTML=(d.waitlist||[]).length?(d.waitlist||[]).map(w=>`<article class="admin-appointment"><strong>${escapeHTML(w.codigo||'PAC')} — ${escapeHTML(w.nome)}</strong><p>${escapeHTML(w.especialidade)} • ${formatarDataBR(w.data)}</p><small>Entrada: ${escapeHTML(w.criadoEm||'')}</small><div class="appointment-actions"><button class="btn primary" type="button" onclick="adicionarPacienteFilaPrincipal(${Number(w.id)})">Adicionar à fila principal</button></div></article>`).join(''):'<div class="info-box">Nenhum paciente aguardando.</div>';}catch(e){box.innerHTML='<div class="info-box">'+escapeHTML(e.message)+'</div>';}}
 
-async function adicionarPacienteFilaPrincipal(waitlistId){if(!Number.isInteger(Number(waitlistId))||Number(waitlistId)<1||!adminSession)return;if(!confirm('Adicionar este paciente à fila principal? Ele receberá uma notificação.'))return;const ubsId=adminSession.tipo==='ubs'?adminSession.ubsId:$("adminUBSSelect")?.value;if(!ubsId)return;try{const d=await api('admin_add_waitlist_to_queue',{method:'POST',body:{ubs_id:ubsId,waitlist_id:Number(waitlistId)}});toast(d.message||'Paciente adicionado à fila principal.');await carregarListaEsperaUBS();}catch(e){toast(e.message);}}
+async function adicionarPacienteFilaPrincipal(waitlistId){if(!Number.isInteger(Number(waitlistId))||Number(waitlistId)<1||!adminSession)return;if(!confirm('Adicionar este paciente à fila principal? Ele receberá uma notificação e o WhatsApp será aberto com a mensagem preenchida.'))return;const ubsId=adminSession.tipo==='ubs'?adminSession.ubsId:$("adminUBSSelect")?.value;if(!ubsId)return;let whatsappWindow=null;try{whatsappWindow=window.open('about:blank','_blank');const d=await api('admin_add_waitlist_to_queue',{method:'POST',body:{ubs_id:ubsId,waitlist_id:Number(waitlistId)}});if(d.whatsapp_url){if(whatsappWindow)whatsappWindow.location.href=d.whatsapp_url;else window.open(d.whatsapp_url,'_blank');toast('Paciente adicionado. O WhatsApp foi aberto com a mensagem preenchida; toque em Enviar.');}else{if(whatsappWindow)whatsappWindow.close();toast('Paciente adicionado e notificado no sistema, mas não possui telefone cadastrado.');}await carregarListaEsperaUBS();}catch(e){if(whatsappWindow)whatsappWindow.close();toast(e.message);}}
 async function salvarCampanhasEventos() {
     const ubs = UBSAdminAtual();
     const button = $("saveCampaignsEventsButton");
