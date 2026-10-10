@@ -149,6 +149,8 @@ try {
             delete_secretaria_account($pdo, body_json());
             break;
 
+        case 'admin_change_password':
+            admin_change_password($pdo, body_json());
         case 'admin_logout':
             admin_logout();
 
@@ -1395,6 +1397,47 @@ function delete_secretaria_account(PDO $pdo,array $data): never
 {
     $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode remover contas da Secretaria.'],403);$id=(int)($data['id']??0);if($id<1||$id===(int)($session['id']??0))json_response(['success'=>false,'message'=>'Conta inválida.'],422);$q=$pdo->prepare("DELETE FROM administradores WHERE id=? AND tipo='secretaria'");$q->execute([$id]);if($q->rowCount()<1)json_response(['success'=>false,'message'=>'Conta da Secretaria não encontrada.'],404);audit_event($pdo,'administrador_secretaria_removido','administradores',(string)$id);json_response(['success'=>true,'message'=>'Conta da Secretaria removida.']);
 }
+function admin_change_password(PDO $pdo, array $data): never
+{
+    $session = require_admin();
+    if (($session['tipo'] ?? '') !== 'desenvolvedor') {
+        json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode alterar esta senha.'],403);
+    }
+    $currentPassword = (string)($data['senha_atual'] ?? '');
+    $newPassword = (string)($data['nova_senha'] ?? '');
+    if ($currentPassword === '') json_response(['success'=>false,'message'=>'Informe a senha atual.'],422);
+    if (strlen($newPassword) < 12 || strlen($newPassword) > 200) {
+        json_response(['success'=>false,'message'=>'A nova senha precisa ter entre 12 e 200 caracteres.'],422);
+    }
+
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare("SELECT senha_hash FROM administradores WHERE id=? AND tipo='desenvolvedor' FOR UPDATE");
+        $stmt->execute([(int)($session['id'] ?? 0)]);
+        $currentHash = $stmt->fetchColumn();
+        if (!is_string($currentHash) || !password_verify($currentPassword, $currentHash)) {
+            $pdo->rollBack();
+            json_response(['success'=>false,'message'=>'A senha atual está incorreta.'],403);
+        }
+        $newHash = password_hash($newPassword, PASSWORD_DEFAULT);
+        $stmt = $pdo->prepare("UPDATE administradores SET senha_hash=? WHERE id=? AND tipo='desenvolvedor'");
+        $stmt->execute([$newHash,(int)$session['id']]);
+        if ($stmt->rowCount() !== 1) {
+            $pdo->rollBack();
+            json_response(['success'=>false,'message'=>'Não foi possível localizar a conta de desenvolvedor.'],404);
+        }
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
+    }
+
+    session_regenerate_id(true);
+    rotate_csrf_token();
+    audit_event($pdo,'senha_desenvolvedor_alterada','administradores',(string)$session['id']);
+    json_response(['success'=>true,'message'=>'Senha do desenvolvedor alterada com sucesso.','csrf_token'=>$_SESSION['_csrf_token']]);
+}
+
 function admin_logout(): never
 {
     unset($_SESSION['admin']);$_SESSION['_auth_created_at']=time();$_SESSION['_last_activity']=time();session_regenerate_id(true);rotate_csrf_token();json_response(['success'=>true,'csrf_token'=>$_SESSION['_csrf_token']]);

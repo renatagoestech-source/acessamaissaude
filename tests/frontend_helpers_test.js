@@ -19,6 +19,11 @@ assert.equal(context.formatarCpf('123'), '123');
 
 const html = fs.readFileSync('index.php', 'utf8');
 const apiSource = fs.readFileSync('api.php', 'utf8');
+assert.match(html, /id="adminChangePasswordButton"[\s\S]*id="adminCurrentPassword"/, 'O painel deve oferecer troca de senha ao desenvolvedor.');
+assert.match(js, /function alterarSenhaDesenvolvedor\(/, 'O formulário deve validar e enviar a troca de senha.');
+assert.match(apiSource, /case 'admin_change_password'/, 'A API deve expor a ação de troca de senha protegida.');
+assert.match(apiSource, /password_verify\(\$currentPassword, \$currentHash\)/, 'A API deve exigir e verificar a senha atual.');
+assert.match(apiSource, /password_hash\(\$newPassword, PASSWORD_DEFAULT\)/, 'A API deve armazenar somente o hash da nova senha.');
 assert.match(html, /id="secAdminEstado"[\s\S]*id="secAdminCidade"/, 'O desenvolvedor deve definir UF e cidade ao criar uma Secretaria.');
 assert.match(js, /function carregarMunicipiosSecretaria\(/, 'O seletor de cidade deve oferecer municípios ao escolher a UF.');
 assert.match(apiSource, /INSERT INTO administradores \(usuario,senha_hash,tipo,ubs_id,cidade,estado\)/, 'A localização escolhida deve ser salva na conta da Secretaria.');

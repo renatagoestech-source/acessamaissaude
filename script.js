@@ -1552,6 +1552,7 @@ async function abrirPainelAdmin(){
     const globalRole=['desenvolvedor','secretaria'].includes(adminSession.tipo);
     $("seletorDesenvolvedor").classList.toggle('hidden',!globalRole);
     $("adminSuporteTab").classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
+    $("adminChangePasswordButton")?.classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
     $("adminAuditoriaTab").classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
     $("adminConfigTab").classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
     $("adminDashboardTab")?.classList.toggle('hidden',adminSession.tipo!=='secretaria');
@@ -1568,6 +1569,9 @@ async function abrirPainelAdmin(){
     else{abrirAbaAdmin('dados');if(adminSession.tipo==='desenvolvedor')await carregarContasSecretaria();}
     atualizarBotaoArquivarUBS();
 }
+function abrirTrocaSenhaAdmin(){if(adminSession?.tipo!=="desenvolvedor"){toast("Somente o desenvolvedor pode alterar esta senha.");return;}["adminCurrentPassword","adminNewPassword","adminConfirmPassword"].forEach(id=>$(id).value="");$("adminChangePasswordModal").classList.remove("hidden");$("adminCurrentPassword").focus();}
+function fecharTrocaSenhaAdmin(){$("adminChangePasswordModal").classList.add("hidden");["adminCurrentPassword","adminNewPassword","adminConfirmPassword"].forEach(id=>$(id).value="");}
+async function alterarSenhaDesenvolvedor(){const atual=$("adminCurrentPassword").value,nova=$("adminNewPassword").value,confirmacao=$("adminConfirmPassword").value;if(!atual||!nova||!confirmacao){toast("Preencha todos os campos.");return;}if(nova.length<12){toast("A nova senha precisa ter pelo menos 12 caracteres.");return;}if(nova!==confirmacao){toast("A confirmação da nova senha não corresponde.");return;}const button=$("adminChangePasswordSubmit");button.disabled=true;try{const data=await api("admin_change_password",{method:"POST",body:{senha_atual:atual,nova_senha:nova}});fecharTrocaSenhaAdmin();toast(data.message||"Senha alterada com sucesso.");}catch(error){toast(error.message);}finally{button.disabled=false;}}
 function fecharAdmin(){if(adminSession){void logoutAdmin();return;}$("adminModal").classList.add('hidden');}
 async function logoutAdmin(){
     const hadSession=!!adminSession;$("adminModal").classList.add('hidden');adminSession=null;
