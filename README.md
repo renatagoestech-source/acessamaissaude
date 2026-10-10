@@ -16,6 +16,8 @@ Para evitar cobranças, mantenha o limite de gastos do Starter em `US$ 0`. Ao at
 
 O banco ainda precisa do esquema inicial. `database.sql` começa com `DROP DATABASE`; execute-o somente em uma instalação nova e vazia, nunca sobre uma base que já contenha dados. As migrações compatíveis restantes são executadas pela aplicação após a primeira conexão.
 
+Em instalações existentes com Supabase/PostgreSQL, aplique manualmente no SQL Editor as migrações necessárias de `migrations/`; para o filtro de UBS por localização, execute `migrations/20261009_ubs_location.sql` antes de publicar o código. O bootstrap da aplicação não executa DDL no PostgreSQL.
+
 Como este sistema pode armazenar informações de saúde, use dados fictícios no plano gratuito até avaliar requisitos de privacidade, backups e disponibilidade para o uso pretendido.
 
 ## Subir pelo GitHub

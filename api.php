@@ -285,7 +285,7 @@ try {
 
 function all_ubs(PDO $pdo, bool $admin): array
 {
-    $sql = 'SELECT id, nome, endereco, telefone, horario, usuario, limite_diario, ativa FROM ubs';
+    $sql = 'SELECT id, nome, endereco, cidade, estado, telefone, horario, usuario, limite_diario, ativa FROM ubs';
     if (!$admin) $sql .= ' WHERE ativa = 1';
     $stmt = $pdo->query($sql . ' ORDER BY nome');
 
@@ -300,7 +300,7 @@ function all_ubs(PDO $pdo, bool $admin): array
 
 function get_ubs(PDO $pdo, string $id, bool $admin = false): array
 {
-    $sql = 'SELECT id, nome, endereco, telefone, horario, usuario, limite_diario, ativa FROM ubs WHERE id = ?';
+    $sql = 'SELECT id, nome, endereco, cidade, estado, telefone, horario, usuario, limite_diario, ativa FROM ubs WHERE id = ?';
     if (!$admin) $sql .= ' AND ativa = 1';
     $stmt = $pdo->prepare($sql);
 
@@ -351,6 +351,8 @@ function get_ubs_from_row(PDO $pdo, array $row, bool $admin): array
         'id' => $row['id'],
         'nome' => $row['nome'],
         'endereco' => $row['endereco'],
+        'cidade' => $row['cidade'] ?? '',
+        'estado' => $row['estado'] ?? '',
         'telefone' => $row['telefone'],
         'horario' => $row['horario'],
         'ativa' => database_bool($row['ativa'] ?? true),
@@ -1414,8 +1416,48 @@ function get_patient_notifications(PDO $pdo, string $sus): never
     $stmt->execute([$id]);
     json_response(['success'=>true,'notifications'=>$stmt->fetchAll()]);
 }
-function create_ubs(PDO $pdo,array $data): never { $session=require_admin(); if(!in_array($session['tipo'],['desenvolvedor','secretaria'],true))json_response(['success'=>false,'message'=>'Apenas a Secretaria de Saúde ou o desenvolvedor pode cadastrar novas UBS.'],403); $id=required_string($data,'id');$nome=required_string($data,'nome');$endereco=required_string($data,'endereco');$telefone=required_string($data,'telefone');$horario=required_string($data,'horario');$usuario=required_string($data,'usuario');$senha=required_string($data,'senha');$esp=clean_list($data['especialidades']??[]);if(!$esp)json_response(['success'=>false,'message'=>'Cadastre pelo menos uma especialidade.'],422);if(!preg_match('/^[A-Za-z0-9_-]{2,20}$/',$id))json_response(['success'=>false,'message'=>'Identificador inválido.'],422);$q=$pdo->prepare('SELECT id FROM ubs WHERE id=? OR usuario=? UNION SELECT ubs_id FROM administradores WHERE usuario=?');$q->execute([$id,$usuario,$usuario]);if($q->fetch())json_response(['success'=>false,'message'=>'Identificador ou usuário já utilizado.'],409);$pdo->beginTransaction();try{$pdo->prepare('INSERT INTO ubs(id,nome,endereco,telefone,horario,usuario,limite_diario) VALUES(?,?,?,?,?,?,?)')->execute([$id,$nome,$endereco,$telefone,$horario,$usuario,12]);replace_list($pdo,'ubs_especialidades',$id,$esp);$pdo->prepare('INSERT INTO administradores(usuario,senha_hash,tipo,ubs_id) VALUES(?,?,"ubs",?)')->execute([$usuario,password_hash($senha,PASSWORD_DEFAULT),$id]);$pdo->commit(); audit_event($pdo, 'ubs_criada', 'ubs', $id, ['nome'=>$nome]); json_response(['success'=>true,'ubs'=>get_ubs($pdo,$id,true)]);}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}}
+function validar_localizacao_ubs(array $data): array
+{
+    $cidade = trim((string)($data['cidade'] ?? ''));
+    $estado = strtoupper(trim((string)($data['estado'] ?? '')));
+    $ufs = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
+    if (preg_match('/^.{2,120}$/uD', $cidade) !== 1 || !in_array($estado, $ufs, true)) {
+        json_response(['success'=>false,'message'=>'Informe uma cidade e uma sigla de UF válida.'],422);
+    }
+    return ['cidade'=>$cidade,'estado'=>$estado];
+}
 
+function create_ubs(PDO $pdo,array $data): never
+{
+    $session = require_admin();
+    if (!in_array($session['tipo'], ['desenvolvedor','secretaria'], true)) json_response(['success'=>false,'message'=>'Apenas a Secretaria de Saúde ou o desenvolvedor pode cadastrar novas UBS.'],403);
+    $id = required_string($data, 'id');
+    $nome = required_string($data, 'nome');
+    $endereco = required_string($data, 'endereco');
+    $location = validar_localizacao_ubs($data);
+    $telefone = required_string($data, 'telefone');
+    $horario = required_string($data, 'horario');
+    $usuario = required_string($data, 'usuario');
+    $senha = required_string($data, 'senha');
+    $esp = clean_list($data['especialidades'] ?? []);
+    if (!$esp) json_response(['success'=>false,'message'=>'Cadastre pelo menos uma especialidade.'],422);
+    if (!preg_match('/^[A-Za-z0-9_-]{2,20}$/', $id)) json_response(['success'=>false,'message'=>'Identificador inválido.'],422);
+    $q = $pdo->prepare('SELECT id FROM ubs WHERE id=? OR usuario=? UNION SELECT ubs_id FROM administradores WHERE usuario=?');
+    $q->execute([$id,$usuario,$usuario]);
+    if ($q->fetch()) json_response(['success'=>false,'message'=>'Identificador ou usuário já utilizado.'],409);
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare('INSERT INTO ubs(id,nome,endereco,cidade,estado,telefone,horario,usuario,limite_diario) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$id,$nome,$endereco,$location['cidade'],$location['estado'],$telefone,$horario,$usuario,12]);
+        replace_list($pdo,'ubs_especialidades',$id,$esp);
+        $pdo->prepare("INSERT INTO administradores(usuario,senha_hash,tipo,ubs_id) VALUES(?,?,'ubs',?)")->execute([$usuario,password_hash($senha,PASSWORD_DEFAULT),$id]);
+        $pdo->commit();
+        audit_event($pdo, 'ubs_criada', 'ubs', $id, ['nome'=>$nome,'cidade'=>$location['cidade'],'estado'=>$location['estado']]);
+        json_response(['success'=>true,'ubs'=>get_ubs($pdo,$id,true)]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
 function admin_exams(PDO $pdo): never
 {
     $ubsId = trim((string)($_GET['ubs_id'] ?? ''));
@@ -1538,6 +1580,7 @@ function update_ubs(PDO $pdo, array $data): never
 
     $nome = required_string($data, 'nome');
     $endereco = required_string($data, 'endereco');
+    $location = validar_localizacao_ubs($data);
     $telefone = required_string($data, 'telefone');
     $horario = required_string($data, 'horario');
     $usuario = required_string($data, 'usuario');
@@ -1601,6 +1644,8 @@ function update_ubs(PDO $pdo, array $data): never
             'UPDATE ubs
              SET nome = ?,
                  endereco = ?,
+                 cidade = ?,
+                 estado = ?,
                  telefone = ?,
                  horario = ?,
                  usuario = ?,
@@ -1611,6 +1656,8 @@ function update_ubs(PDO $pdo, array $data): never
         $stmt->execute([
             $nome,
             $endereco,
+            $location['cidade'],
+            $location['estado'],
             $telefone,
             $horario,
             $usuario,
