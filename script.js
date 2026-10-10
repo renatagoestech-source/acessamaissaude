@@ -1305,7 +1305,60 @@ async function cancelarConsultaPaciente(id) {
     } catch(error) { toast(error.message); }
 }
 
-function preencherSelectUBSPaciente(){const select=$("ubsPaciente");if(!select)return;const preferred=sessionStorage.getItem(STORAGE_LAST_UBS);select.innerHTML='<option value="">Selecione sua UBS</option>'+ubsList.map(u=>`<option value="${escapeHTML(u.id)}">${escapeHTML(u.nome)}</option>`).join('');if(preferred&&ubsList.some(u=>String(u.id)===String(preferred)))select.value=preferred;select.onchange=()=>{if(select.value)sessionStorage.setItem(STORAGE_LAST_UBS,String(select.value));else sessionStorage.removeItem(STORAGE_LAST_UBS);};}
+function filtrarUBSPorLocalizacao(unidades, estado, cidade) {
+    return unidades.filter(unidade => String(unidade.estado || "").trim().toUpperCase() === estado && String(unidade.cidade || "").trim().toLocaleLowerCase("pt-BR") === String(cidade || "").trim().toLocaleLowerCase("pt-BR"));
+}
+function preencherSelectUBSPaciente() {
+    const estadoSelect = $("estadoPaciente");
+    const cidadeSelect = $("cidadePaciente");
+    const ubsSelect = $("ubsPaciente");
+    if (!estadoSelect || !cidadeSelect || !ubsSelect) return;
+
+    const disponiveis = ubsList.filter(u => String(u.estado || "").trim() && String(u.cidade || "").trim());
+    const preferidaId = sessionStorage.getItem(STORAGE_LAST_UBS);
+    const preferida = disponiveis.find(u => String(u.id) === String(preferidaId));
+    const estados = [...new Set(disponiveis.map(u => String(u.estado).toUpperCase()))].sort();
+    const nomesEstados = {AC:"Acre",AL:"Alagoas",AP:"Amapá",AM:"Amazonas",BA:"Bahia",CE:"Ceará",DF:"Distrito Federal",ES:"Espírito Santo",GO:"Goiás",MA:"Maranhão",MT:"Mato Grosso",MS:"Mato Grosso do Sul",MG:"Minas Gerais",PA:"Pará",PB:"Paraíba",PR:"Paraná",PE:"Pernambuco",PI:"Piauí",RJ:"Rio de Janeiro",RN:"Rio Grande do Norte",RS:"Rio Grande do Sul",RO:"Rondônia",RR:"Roraima",SC:"Santa Catarina",SP:"São Paulo",SE:"Sergipe",TO:"Tocantins"};
+
+    estadoSelect.innerHTML = '<option value="">Selecione o estado</option>' + estados.map(uf => `<option value="${escapeAttr(uf)}">${escapeHTML(nomesEstados[uf] ? `${nomesEstados[uf]} (${uf})` : uf)}</option>`).join("");
+    estadoSelect.disabled = estados.length === 0;
+    const localizacaoAjuda = $("ubsLocalizacaoAjuda");
+    if (localizacaoAjuda && disponiveis.length < ubsList.length) {
+        const semLocalizacao = ubsList.length - disponiveis.length;
+        localizacaoAjuda.textContent = disponiveis.length === 0
+            ? "Nenhuma UBS tem cidade e UF cadastradas. Peça à Secretaria ou ao administrador para atualizar a localização das unidades."
+            : `${semLocalizacao} UBS sem cidade/UF cadastradas não aparecem até que a localização seja atualizada.`;
+    }
+    estadoSelect.value = preferida?.estado ? String(preferida.estado).toUpperCase() : "";
+
+    const atualizarCidades = (cidadeInicial = "") => {
+        const cidades = [...new Set(disponiveis.filter(u => String(u.estado).toUpperCase() === estadoSelect.value).map(u => String(u.cidade).trim()))].sort((a,b) => a.localeCompare(b, "pt-BR"));
+        cidadeSelect.innerHTML = `<option value="">${estadoSelect.value ? "Selecione a cidade" : "Selecione primeiro o estado"}</option>` + cidades.map(cidade => `<option value="${escapeAttr(cidade)}">${escapeHTML(cidade)}</option>`).join("");
+        cidadeSelect.disabled = !estadoSelect.value || cidades.length === 0;
+        cidadeSelect.value = cidades.includes(cidadeInicial) ? cidadeInicial : "";
+        atualizarUBSs();
+    };
+    const atualizarUBSs = () => {
+        const localizadas = filtrarUBSPorLocalizacao(disponiveis, estadoSelect.value, cidadeSelect.value);
+        ubsSelect.innerHTML = `<option value="">${cidadeSelect.value ? "Selecione sua UBS" : "Selecione primeiro a cidade"}</option>` + localizadas.map(u => `<option value="${escapeAttr(u.id)}">${escapeHTML(u.nome)}</option>`).join("");
+        ubsSelect.disabled = localizadas.length === 0;
+        if (preferidaId && localizadas.some(u => String(u.id) === String(preferidaId))) ubsSelect.value = String(preferidaId);
+    };
+
+    estadoSelect.onchange = () => {
+        sessionStorage.removeItem(STORAGE_LAST_UBS);
+        atualizarCidades();
+    };
+    cidadeSelect.onchange = () => {
+        sessionStorage.removeItem(STORAGE_LAST_UBS);
+        atualizarUBSs();
+    };
+    ubsSelect.onchange = () => {
+        if (ubsSelect.value) sessionStorage.setItem(STORAGE_LAST_UBS, String(ubsSelect.value));
+        else sessionStorage.removeItem(STORAGE_LAST_UBS);
+    };
+    atualizarCidades(preferida?.cidade || "");
+}
 function abrirSuporte(){const p=JSON.parse(sessionStorage.getItem(STORAGE_PATIENT)||'null');if(p){$("suporteNome").value=p.nome||'';$("suporteTelefone").value=p.telefone||'';}const clinic=!!window.publicClinicSlug;const title=$("supportModal")?.querySelector('h2');const hint=$("supportModal")?.querySelector('.subtitle');if(title)title.textContent=clinic?'Fale com a clínica':'Como podemos ajudar?';const fabLabel=$("supportFabLabel");if(fabLabel)fabLabel.textContent=clinic?'Fale com a clínica':'Suporte ao paciente';if(hint)hint.textContent=clinic?'Sua solicitação será recebida primeiro pela clínica. Ela poderá responder, resolver ou encaminhar apenas problemas técnicos.':'Envie sua dúvida e guarde o protocolo para acompanhar a resposta.';$("supportModal").classList.remove('hidden');carregarMeuSuporte();}
 function fecharSuporte(){$("supportModal").classList.add('hidden');}
 async function carregarMeuSuporte(){
@@ -1334,7 +1387,7 @@ async function enviarSuporte(){
 }
 
 function abrirNovaUBSForm(){$("formNovaUBS").classList.remove('hidden');}function fecharNovaUBSForm(){$("formNovaUBS").classList.add('hidden');}
-async function salvarNovaUBS(){const body={id:$("novaUBSId").value.trim(),nome:$("novaUBSNome").value.trim(),endereco:$("novaUBSEndereco").value.trim(),telefone:$("novaUBSTelefone").value.trim(),horario:$("novaUBSHorario").value.trim(),usuario:$("novaUBSUsuario").value.trim(),senha:$("novaUBSSenha").value,especialidades:converterTextoLista($("novaUBSEspecialidades").value)};try{const d=await api('create_ubs',{method:'POST',body});ubsList.push(d.ubs);ubsList.sort((a,b)=>a.nome.localeCompare(b.nome));preencherSelectAdmin();$("adminUBSSelect").value=d.ubs.id;$("novaUBSSenha").value='';fecharNovaUBSForm();await carregarDadosAdmin(d.ubs.id);atualizarBotaoArquivarUBS();toast('UBS criada com sucesso.');if(adminSession?.tipo==='secretaria')await carregarPainelSecretaria();}catch(e){toast(e.message);}}
+async function salvarNovaUBS(){const body={id:$("novaUBSId").value.trim(),nome:$("novaUBSNome").value.trim(),endereco:$("novaUBSEndereco").value.trim(),cidade:$("novaUBSCidade").value.trim(),estado:$("novaUBSEstado").value.trim().toUpperCase(),telefone:$("novaUBSTelefone").value.trim(),horario:$("novaUBSHorario").value.trim(),usuario:$("novaUBSUsuario").value.trim(),senha:$("novaUBSSenha").value,especialidades:converterTextoLista($("novaUBSEspecialidades").value)};try{const d=await api('create_ubs',{method:'POST',body});ubsList.push(d.ubs);ubsList.sort((a,b)=>a.nome.localeCompare(b.nome));preencherSelectAdmin();$("adminUBSSelect").value=d.ubs.id;$("novaUBSSenha").value='';fecharNovaUBSForm();await carregarDadosAdmin(d.ubs.id);atualizarBotaoArquivarUBS();toast('UBS criada com sucesso.');if(adminSession?.tipo==='secretaria')await carregarPainelSecretaria();}catch(e){toast(e.message);}}
 
 function imprimirConsulta(id) {
 
@@ -1490,7 +1543,7 @@ async function realizarLogin() {
 
 }
 
-async function carregarDadosAdmin(id){try{const data=await api('admin_ubs_data',{params:{ubs_id:id}});const i=ubsList.findIndex(u=>u.id===id);if(i>=0)ubsList[i]=data.ubs;const u=data.ubs;[ ['editNomeUBS','nome'],['editEndereco','endereco'],['editTelefone','telefone'],['editHorario','horario'],['editUsuario','usuario'],['editLimiteDiario','limiteDiario'] ].forEach(([a,b])=>$(a).value=u[b]||'');$("editEspecialidades").value=(u.especialidades||[]).join('\n');$("editServicos").value=(u.servicos||[]).join('\n');$("editCampanhas").value=(u.campanhas||[]).join('\n');$("editDocumentos").value=(u.documentos||[]).join('\n');renderFuncionariosAdmin();}catch(e){toast(e.message);}}
+async function carregarDadosAdmin(id){try{const data=await api('admin_ubs_data',{params:{ubs_id:id}});const i=ubsList.findIndex(u=>u.id===id);if(i>=0)ubsList[i]=data.ubs;const u=data.ubs;[ ['editNomeUBS','nome'],['editEndereco','endereco'],['editCidade','cidade'],['editEstado','estado'],['editTelefone','telefone'],['editHorario','horario'],['editUsuario','usuario'],['editLimiteDiario','limiteDiario'] ].forEach(([a,b])=>$(a).value=u[b]||'');$("editEspecialidades").value=(u.especialidades||[]).join('\n');$("editServicos").value=(u.servicos||[]).join('\n');$("editCampanhas").value=(u.campanhas||[]).join('\n');$("editDocumentos").value=(u.documentos||[]).join('\n');renderFuncionariosAdmin();}catch(e){toast(e.message);}}
 
 async function abrirPainelAdmin(){
     if(!adminSession)return;
@@ -1753,6 +1806,9 @@ async function salvarInformacoesUBS() {
             $("editEndereco")
                 .value
                 .trim(),
+
+        cidade: $("editCidade").value.trim(),
+        estado: $("editEstado").value.trim().toUpperCase(),
 
         telefone:
             $("editTelefone")

@@ -312,6 +312,26 @@ async function testProfessionalSessionRestoration() {
   console.log('Restauração automática da sessão clínica após reabrir: OK');
 }
 
+
+function testPatientUBSLocationFilter() {
+  const filterStart = js.indexOf('function filtrarUBSPorLocalizacao(');
+  const filterEnd = js.indexOf('\nfunction preencherSelectUBSPaciente()', filterStart);
+  assert(filterStart >= 0 && filterEnd > filterStart, 'O filtro de UBS por cidade/UF deve estar definido.');
+  const context = {};
+  vm.runInNewContext(js.slice(filterStart, filterEnd), context);
+  const units = [
+    { id: '1', cidade: 'São João', estado: 'PE' },
+    { id: '2', cidade: 'são joão', estado: 'PE' },
+    { id: '3', cidade: 'Recife', estado: 'PE' },
+    { id: '4', cidade: 'São João', estado: 'BA' },
+    { id: '5', cidade: '', estado: '' }
+  ];
+  const found = context.filtrarUBSPorLocalizacao(units, 'PE', 'São João');
+  assert.deepEqual(Array.from(found, unit => unit.id), ['1', '2'], 'A UBS deve corresponder exatamente à cidade selecionada e à UF, sem diferença por maiúsculas/minúsculas.');
+  console.log('Filtro de UBS por cidade e UF: OK');
+}
+testPatientUBSLocationFilter();
+
 async function runAsyncTests() {
   await testScheduleLoadingStates();
   await testStartupRetryAndErrorMessage();
