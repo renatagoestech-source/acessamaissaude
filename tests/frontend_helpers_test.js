@@ -19,6 +19,11 @@ assert.equal(context.formatarCpf('123'), '123');
 
 const html = fs.readFileSync('index.php', 'utf8');
 const apiSource = fs.readFileSync('api.php', 'utf8');
+assert.match(html, /id="secAdminEstado"[\s\S]*id="secAdminCidade"/, 'O desenvolvedor deve definir UF e cidade ao criar uma Secretaria.');
+assert.match(js, /function carregarMunicipiosSecretaria\(/, 'O seletor de cidade deve oferecer municípios ao escolher a UF.');
+assert.match(apiSource, /INSERT INTO administradores \(usuario,senha_hash,tipo,ubs_id,cidade,estado\)/, 'A localização escolhida deve ser salva na conta da Secretaria.');
+assert.match(apiSource, /SELECT cidade, estado FROM administradores WHERE id=\? AND tipo='secretaria'/, 'A API deve obter a localização da própria Secretaria autenticada.');
+assert.match(apiSource, /UPDATE administradores SET cidade=\?,estado=\? WHERE id=\? AND tipo='secretaria'/, 'Contas antigas recebem localização ao criarem a primeira UBS.');
 const definitions = new Set([
   ...Array.from(js.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g), match => match[1]),
   ...Array.from(js.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\(?[^=]*=>)/g), match => match[1]),
