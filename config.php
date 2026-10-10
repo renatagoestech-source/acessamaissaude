@@ -90,6 +90,8 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
     $addColumn('ubs', 'limite_diario', 'INT UNSIGNED NOT NULL DEFAULT 12 AFTER usuario');
     $addColumn('ubs', 'cidade', "VARCHAR(120) NOT NULL DEFAULT '' AFTER endereco");
     $addColumn('ubs', 'estado', "CHAR(2) NOT NULL DEFAULT '' AFTER cidade");
+    $addColumn('administradores', 'cidade', "VARCHAR(120) NOT NULL DEFAULT '' AFTER ubs_id");
+    $addColumn('administradores', 'estado', "CHAR(2) NOT NULL DEFAULT '' AFTER cidade");
     $addColumn('pacientes', 'email', 'VARCHAR(180) NULL AFTER telefone');
     $addColumn('profissionais', 'slug', 'VARCHAR(160) NULL AFTER email');
     $addColumn('profissionais', 'cnpj', 'VARCHAR(30) NULL AFTER slug');

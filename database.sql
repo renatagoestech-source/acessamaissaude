@@ -163,6 +163,8 @@ CREATE TABLE IF NOT EXISTS administradores (
     senha_hash VARCHAR(255) NOT NULL,
     tipo ENUM('desenvolvedor','ubs','secretaria') NOT NULL,
     ubs_id VARCHAR(20) NULL UNIQUE,
+    cidade VARCHAR(120) NOT NULL DEFAULT '',
+    estado CHAR(2) NOT NULL DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_admin_ubs FOREIGN KEY (ubs_id) REFERENCES ubs(id) ON DELETE CASCADE

@@ -1382,14 +1382,14 @@ function list_admin_ubs(PDO $pdo): never
 }
 function list_secretaria_accounts(PDO $pdo): never
 {
-    $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode administrar as contas da Secretaria.'],403);$q=$pdo->query("SELECT id,usuario,created_at AS criadoEm FROM administradores WHERE tipo='secretaria' ORDER BY usuario");json_response(['success'=>true,'accounts'=>$q->fetchAll()]);
+    $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode administrar as contas da Secretaria.'],403);$q=$pdo->query("SELECT id,usuario,cidade,estado,created_at AS criadoEm FROM administradores WHERE tipo='secretaria' ORDER BY usuario");json_response(['success'=>true,'accounts'=>$q->fetchAll()]);
 }
 function create_secretaria_account(PDO $pdo,array $data): never
 {
-    $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode provisionar o administrador da Secretaria.'],403);$user=required_string($data,'usuario');$password=(string)($data['senha']??'');
+    $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode provisionar o administrador da Secretaria.'],403);$user=required_string($data,'usuario');$password=(string)($data['senha']??'');$location=validar_localizacao_ubs($data);
     if(!preg_match('/^[A-Za-z0-9._@-]{3,80}$/',$user))json_response(['success'=>false,'message'=>'Use um usuário de 3 a 80 caracteres: letras, números, ponto, hífen, sublinhado ou @.'],422);if(strlen($password)<12||strlen($password)>200)json_response(['success'=>false,'message'=>'A senha precisa ter entre 12 e 200 caracteres.'],422);
-    try{$q=$pdo->prepare("INSERT INTO administradores (usuario,senha_hash,tipo,ubs_id) VALUES (?,?,'secretaria',NULL)");$q->execute([$user,password_hash($password,PASSWORD_DEFAULT)]);$id=(int)$pdo->lastInsertId();}catch(PDOException $e){if(database_is_unique_violation($e))json_response(['success'=>false,'message'=>'Esse usuário já está cadastrado.'],409);throw $e;}
-    audit_event($pdo,'administrador_secretaria_criado','administradores',(string)$id,['usuario'=>$user]);json_response(['success'=>true,'message'=>'Conta da Secretaria criada. Entregue o usuário e a senha de forma segura.','account'=>['id'=>$id,'usuario'=>$user]]);
+    try{$q=$pdo->prepare("INSERT INTO administradores (usuario,senha_hash,tipo,ubs_id,cidade,estado) VALUES (?,?,'secretaria',NULL,?,?)");$q->execute([$user,password_hash($password,PASSWORD_DEFAULT),$location['cidade'],$location['estado']]);$id=(int)$pdo->lastInsertId();}catch(PDOException $e){if(database_is_unique_violation($e))json_response(['success'=>false,'message'=>'Esse usuário já está cadastrado.'],409);throw $e;}
+    audit_event($pdo,'administrador_secretaria_criado','administradores',(string)$id,['usuario'=>$user,'cidade'=>$location['cidade'],'estado'=>$location['estado']]);json_response(['success'=>true,'message'=>'Conta da Secretaria criada com cidade e UF. As novas UBS herdarão essa localização.','account'=>['id'=>$id,'usuario'=>$user,'cidade'=>$location['cidade'],'estado'=>$location['estado']]]);
 }
 function delete_secretaria_account(PDO $pdo,array $data): never
 {
@@ -1434,7 +1434,21 @@ function create_ubs(PDO $pdo,array $data): never
     $id = required_string($data, 'id');
     $nome = required_string($data, 'nome');
     $endereco = required_string($data, 'endereco');
-    $location = validar_localizacao_ubs($data);
+    $secretariaNeedsLocationSave = false;
+    if ($session['tipo'] === 'secretaria') {
+        $qSecretaria = $pdo->prepare("SELECT cidade, estado FROM administradores WHERE id=? AND tipo='secretaria'");
+        $qSecretaria->execute([(int)($session['id'] ?? 0)]);
+        $secretariaLocation = $qSecretaria->fetch(PDO::FETCH_ASSOC);
+        if (!$secretariaLocation) json_response(['success'=>false,'message'=>'Conta da Secretaria não encontrada.'],403);
+        if (trim((string)$secretariaLocation['cidade']) !== '' && trim((string)$secretariaLocation['estado']) !== '') {
+            $location = validar_localizacao_ubs($secretariaLocation);
+        } else {
+            $location = validar_localizacao_ubs($data);
+            $secretariaNeedsLocationSave = true;
+        }
+    } else {
+        $location = validar_localizacao_ubs($data);
+    }
     $telefone = required_string($data, 'telefone');
     $horario = required_string($data, 'horario');
     $usuario = required_string($data, 'usuario');
@@ -1447,6 +1461,9 @@ function create_ubs(PDO $pdo,array $data): never
     if ($q->fetch()) json_response(['success'=>false,'message'=>'Identificador ou usuário já utilizado.'],409);
     $pdo->beginTransaction();
     try {
+        if ($secretariaNeedsLocationSave) {
+            $pdo->prepare("UPDATE administradores SET cidade=?,estado=? WHERE id=? AND tipo='secretaria'")->execute([$location['cidade'],$location['estado'],(int)($session['id'] ?? 0)]);
+        }
         $pdo->prepare('INSERT INTO ubs(id,nome,endereco,cidade,estado,telefone,horario,usuario,limite_diario) VALUES(?,?,?,?,?,?,?,?,?)')->execute([$id,$nome,$endereco,$location['cidade'],$location['estado'],$telefone,$horario,$usuario,12]);
         replace_list($pdo,'ubs_especialidades',$id,$esp);
         $pdo->prepare("INSERT INTO administradores(usuario,senha_hash,tipo,ubs_id) VALUES(?,?,'ubs',?)")->execute([$usuario,password_hash($senha,PASSWORD_DEFAULT),$id]);
@@ -1492,7 +1509,7 @@ function login_admin(PDO $pdo, array $data): never
     }
 
     $stmt = $pdo->prepare(
-        'SELECT a.id, a.usuario, a.senha_hash, a.tipo, a.ubs_id, u.ativa AS ubs_ativa
+        'SELECT a.id, a.usuario, a.senha_hash, a.tipo, a.ubs_id, a.cidade, a.estado, u.ativa AS ubs_ativa
          FROM administradores a
          LEFT JOIN ubs u ON u.id = a.ubs_id
          WHERE a.usuario = ?'
@@ -1522,7 +1539,9 @@ function login_admin(PDO $pdo, array $data): never
     $_SESSION['admin'] = [
         'id' => (int)$admin['id'],
         'tipo' => $admin['tipo'],
-        'ubs_id' => $admin['ubs_id']
+        'ubs_id' => $admin['ubs_id'],
+        'cidade' => $admin['cidade'] ?? '',
+        'estado' => trim((string)($admin['estado'] ?? ''))
     ];
 
     audit_event($pdo, 'login_admin', 'administradores', (string)$admin['id'], ['usuario' => $usuario]);
@@ -1533,7 +1552,9 @@ function login_admin(PDO $pdo, array $data): never
         'session' => [
             'id' => (int)$admin['id'],
             'tipo' => $admin['tipo'],
-            'ubsId' => $admin['ubs_id']
+            'ubsId' => $admin['ubs_id'],
+            'cidade' => $admin['cidade'] ?? '',
+            'estado' => trim((string)($admin['estado'] ?? ''))
         ]
     ]);
 }
