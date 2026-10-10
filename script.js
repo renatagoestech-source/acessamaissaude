@@ -993,7 +993,9 @@ async function agendarConsulta() {
 
     currentSubject = $("consultaAssunto")?.value.trim() || "";
 
+    let whatsappWindow = null;
     try {
+        whatsappWindow = window.open("about:blank", "_blank");
 
         const data =
             await api(
@@ -1010,9 +1012,8 @@ async function agendarConsulta() {
                 }
             );
 
-        appointments.push(
-            data.appointment
-        );
+        appointments.push(data.appointment);
+        abrirLembreteWhatsApp(data.appointment, paciente.nome, whatsappWindow);
 
         currentTime = null;
 
@@ -1032,12 +1033,27 @@ async function agendarConsulta() {
 
     } catch (error) {
 
+        if (whatsappWindow) whatsappWindow.close();
         toast(error.message);
 
         await renderHorarios();
 
     }
 
+}
+
+function abrirLembreteWhatsApp(consulta, nome, janela = null) {
+    const phone = String(consulta?.telefone || '').replace(/\D/g, '');
+    if (!phone) {
+        if (janela) janela.close();
+        return;
+    }
+    const horario = consulta.horario ? ` às ${consulta.horario}` : ` na posição ${Number(consulta.fila || 0)} da fila`;
+    const mensagem = `Olá, ${nome || 'paciente'}! Este é um lembrete da sua consulta na ${consulta.ubsNome || 'UBS'}. Data: ${formatarDataBR(consulta.data)}${horario}. Especialidade: ${consulta.especialidade || 'atendimento'}. Protocolo: ${consulta.id}.`;
+    const telefoneWhatsApp = phone.startsWith('55') && phone.length >= 12 ? phone : `55${phone}`;
+    const url = `https://wa.me/${telefoneWhatsApp}?text=${encodeURIComponent(mensagem)}`;
+    if (janela) janela.location.href = url;
+    else window.open(url, '_blank');
 }
 
 function mostrarComprovante(consulta) {
