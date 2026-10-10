@@ -242,6 +242,7 @@ try {
             break;
 
         case 'admin_waitlist': admin_waitlist($pdo); break;
+        case 'admin_add_waitlist_to_queue': admin_add_waitlist_to_queue($pdo, body_json()); break;
         case 'admin_appointments':
             admin_appointments($pdo);
             break;
@@ -1878,6 +1879,19 @@ function admin_waitlist(PDO $pdo): never {
     $ubsId=trim((string)($_GET['ubs_id']??'')); $especialidade=trim((string)($_GET['especialidade']??'')); $date=trim((string)($_GET['data']??'')); authorize_ubs($ubsId);
     $sql='SELECT l.id,l.data_consulta AS data,l.especialidade,l.criado_em AS criadoEm,p.codigo,p.nome,p.telefone FROM lista_espera l INNER JOIN pacientes p ON p.id=l.paciente_id WHERE l.ubs_id=? AND l.status="pendente"';$params=[$ubsId];
     if($especialidade!==''){$sql.=' AND l.especialidade=?';$params[]=$especialidade;} if($date!==''){$sql.=' AND l.data_consulta=?';$params[]=$date;}$sql.=' ORDER BY l.data_consulta,l.especialidade,l.id';$q=$pdo->prepare($sql);$q->execute($params);json_response(['success'=>true,'waitlist'=>$q->fetchAll()]);
+}
+function admin_add_waitlist_to_queue(PDO $pdo,array $data): never {
+    $ubsId=required_string($data,'ubs_id');$waitlistId=(int)($data['waitlist_id']??0);if($waitlistId<1)json_response(['success'=>false,'message'=>'Paciente da lista de espera não informado.'],422);authorize_ubs($ubsId);
+    $pdo->beginTransaction();try{
+        $q=$pdo->prepare('SELECT l.id,l.paciente_id,l.especialidade,l.data_consulta,p.nome FROM lista_espera l INNER JOIN pacientes p ON p.id=l.paciente_id WHERE l.id=? AND l.ubs_id=? AND l.status="pendente" FOR UPDATE');$q->execute([$waitlistId,$ubsId]);$row=$q->fetch();if(!$row){$pdo->rollBack();json_response(['success'=>false,'message'=>'Este paciente não está mais pendente na lista de espera. Atualize a lista e tente novamente.'],409);}
+        $q=$pdo->prepare('SELECT id FROM consultas WHERE paciente_id=? AND ubs_id=? AND especialidade=? AND data_consulta=? AND status="agendado" LIMIT 1');$q->execute([$row['paciente_id'],$ubsId,$row['especialidade'],$row['data_consulta']]);if($q->fetch()){ $pdo->rollBack();json_response(['success'=>false,'message'=>'Este paciente já possui uma consulta agendada para esta UBS, especialidade e data.'],409); }
+        $lock=$pdo->prepare('SELECT nome FROM ubs WHERE id=? FOR UPDATE');$lock->execute([$ubsId]);$unit=$lock->fetch();if(!$unit){$pdo->rollBack();json_response(['success'=>false,'message'=>'UBS não encontrada.'],404);}
+        $next=$pdo->prepare('SELECT COALESCE(MAX(fila),0)+1 FROM consultas WHERE ubs_id=? AND especialidade=? AND data_consulta=?');$next->execute([$ubsId,$row['especialidade'],$row['data_consulta']]);$fila=(int)$next->fetchColumn();
+        $id='CONS-'.date('YmdHis').'-'.strtoupper(bin2hex(random_bytes(3)));$ins=$pdo->prepare('INSERT INTO consultas (id,ubs_id,paciente_id,especialidade,assunto,data_consulta,horario,fila,status) VALUES (?,?,?,?,?,? ,"00:00:00",?,"agendado")');$ins->execute([$id,$ubsId,$row['paciente_id'],$row['especialidade'],'Encaixe administrativo da lista de espera',$row['data_consulta'],$fila]);
+        $pdo->prepare('UPDATE lista_espera SET status="agendado",consulta_id=? WHERE id=? AND status="pendente"')->execute([$id,$waitlistId]);
+        $msg="Olá, {$row['nome']}! Você foi encaixado(a) na fila da {$unit['nome']} para {$row['especialidade']} em ".date('d/m/Y',strtotime($row['data_consulta'])).". Sua posição é {$fila}. Protocolo: {$id}.";$pdo->prepare('INSERT INTO notificacoes (paciente_id,consulta_id,canal,tipo,mensagem,agendada_para,status) VALUES (?,? ,"push","lista_espera_encaixada",?,NOW(),"pendente")')->execute([$row['paciente_id'],$id,$msg]);
+        $pdo->commit();audit_event($pdo,'paciente_encaixado_lista_espera','consultas',$id,['ubs_id'=>$ubsId,'lista_espera_id'=>$waitlistId,'fila'=>$fila]);json_response(['success'=>true,'appointment_id'=>$id,'fila'=>$fila,'message'=>'Paciente adicionado à fila principal e notificado.']);
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 function admin_appointments(PDO $pdo): never
 {
