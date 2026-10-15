@@ -408,7 +408,7 @@ function ensure_professional_public_slug(PDO $pdo,array $professional): array {
 }
 function public_clinic(PDO $pdo,string $slug): never {
     if($slug==='')json_response(['success'=>false,'message'=>'Clínica não informada.'],422);
-    $q=$pdo->prepare("SELECT id,nome,slug,especialidade,registro_profissional AS registroProfissional,telefone,whatsapp,instagram_url AS instagramUrl,endereco,modalidade,valor_consulta AS valorConsulta,limite_diario AS limiteDiario,apresentacao,logo_arquivo AS logoArquivo,horario_funcionamento AS horarioFuncionamento,mensagem_pos_venda AS mensagemPosVenda,aviso_publico AS avisoPublico,cor_primaria AS corPrimaria,cor_secundaria AS corSecundaria,confirmacao_automatica AS confirmacaoAutomatica,cancelamento_ate_horas AS cancelamentoAteHoras,remarcacao_ate_horas AS remarcacaoAteHoras FROM profissionais WHERE slug=? AND status='ativo'");
+    $q=$pdo->prepare("SELECT id,nome,slug,especialidade,registro_profissional AS registroProfissional,telefone,whatsapp,endereco,modalidade,valor_consulta AS valorConsulta,limite_diario AS limiteDiario,apresentacao,logo_arquivo AS logoArquivo,horario_funcionamento AS horarioFuncionamento,mensagem_pos_venda AS mensagemPosVenda,aviso_publico AS avisoPublico,cor_primaria AS corPrimaria,cor_secundaria AS corSecundaria,confirmacao_automatica AS confirmacaoAutomatica,cancelamento_ate_horas AS cancelamentoAteHoras,remarcacao_ate_horas AS remarcacaoAteHoras FROM profissionais WHERE slug=? AND status='ativo'");
     $q->execute([$slug]);$p=$q->fetch();if(!$p)json_response(['success'=>false,'message'=>'Clínica não encontrada.'],404);
     json_response(['success'=>true,'clinic'=>$p]);
 }
@@ -488,7 +488,7 @@ function professional_login(PDO $pdo, array $data): never {
     json_response(['success'=>true,'csrf_token'=>$_SESSION['_csrf_token'],'professional'=>['id'=>(int)$p['id'],'nome'=>$p['nome'],'email'=>$p['email'],'slug'=>$p['slug']??'']]);
 }
 function professional_me(PDO $pdo): never {
-    $s=require_professional();$q=$pdo->prepare('SELECT id,nome,email,slug,cnpj,especialidade,registro_profissional AS registroProfissional,telefone,whatsapp,instagram_url AS instagramUrl,endereco,modalidade,valor_consulta AS valorConsulta,limite_diario AS limiteDiario,apresentacao,logo_arquivo AS logoArquivo,horario_funcionamento AS horarioFuncionamento,mensagem_pos_venda AS mensagemPosVenda,aviso_publico AS avisoPublico,cor_primaria AS corPrimaria,cor_secundaria AS corSecundaria,confirmacao_automatica AS confirmacaoAutomatica,cancelamento_ate_horas AS cancelamentoAteHoras,remarcacao_ate_horas AS remarcacaoAteHoras,status FROM profissionais WHERE id=?');
+    $s=require_professional();$q=$pdo->prepare('SELECT id,nome,email,slug,cnpj,especialidade,registro_profissional AS registroProfissional,telefone,whatsapp,endereco,modalidade,valor_consulta AS valorConsulta,limite_diario AS limiteDiario,apresentacao,logo_arquivo AS logoArquivo,horario_funcionamento AS horarioFuncionamento,mensagem_pos_venda AS mensagemPosVenda,aviso_publico AS avisoPublico,cor_primaria AS corPrimaria,cor_secundaria AS corSecundaria,confirmacao_automatica AS confirmacaoAutomatica,cancelamento_ate_horas AS cancelamentoAteHoras,remarcacao_ate_horas AS remarcacaoAteHoras,status FROM profissionais WHERE id=?');
     $q->execute([$s['id']]);$professional=$q->fetch();
     if(!is_array($professional))json_response(['success'=>false,'message'=>'Perfil profissional não encontrado.'],404);
     $professional=ensure_professional_public_slug($pdo,$professional);
@@ -499,19 +499,12 @@ function professional_update_settings(PDO $pdo,array $data): never {
     $s=require_professional(); $nome=required_string($data,'nome');
     if(!array_key_exists('logo_arquivo',$data)){ $keep=$pdo->prepare('SELECT logo_arquivo FROM profissionais WHERE id=?'); $keep->execute([$s['id']]); $data['logo_arquivo']=$keep->fetchColumn(); }
     $limite=max(1,(int)($data['limite_diario']??12));
-    $instagram=trim((string)($data['instagram_url']??''));
-    if($instagram!==''){
-        if(str_starts_with($instagram,'@'))$instagram=substr($instagram,1);
-        if(preg_match('/^https?:\/\/(www\.)?instagram\.com\/([A-Za-z0-9._]+)\/?$/i',$instagram,$m))$instagram=$m[2];
-        if(!preg_match('/^[A-Za-z0-9._]{1,30}$/',$instagram))json_response(['success'=>false,'message'=>'Informe um @usuário ou link válido do Instagram.'],422);
-        $instagram='https://www.instagram.com/'.$instagram.'/';
-    }else $instagram=null;
     $fields=['cnpj','especialidade','registro_profissional','telefone','whatsapp','endereco','modalidade','apresentacao','logo_arquivo','horario_funcionamento','aviso_publico','mensagem_pos_venda','cor_primaria','cor_secundaria']; $v=[]; foreach($fields as $f)$v[]=trim((string)($data[$f]??''))?:null;
     $confirmacao=isset($data['confirmacao_automatica'])?filter_var($data['confirmacao_automatica'],FILTER_VALIDATE_BOOLEAN):true;
     $cancelar=max(0,min(720,(int)($data['cancelamento_ate_horas']??24)));
     $remarcar=max(0,min(720,(int)($data['remarcacao_ate_horas']??24)));
-    $q=$pdo->prepare('UPDATE profissionais SET nome=?,cnpj=?,especialidade=?,registro_profissional=?,telefone=?,whatsapp=?,instagram_url=?,endereco=?,modalidade=?,apresentacao=?,logo_arquivo=?,horario_funcionamento=?,aviso_publico=?,mensagem_pos_venda=?,cor_primaria=COALESCE(?,cor_primaria),cor_secundaria=COALESCE(?,cor_secundaria),valor_consulta=?,limite_diario=?,confirmacao_automatica=?,cancelamento_ate_horas=?,remarcacao_ate_horas=? WHERE id=?');
-    $q->execute([$nome,$v[0],$v[1],$v[2],$v[3],$v[4],$instagram,$v[5],$v[6],$v[7],$v[8],$v[9],$v[10],$v[11],$v[12],$v[13],$data['valor_consulta']??null,$limite,$confirmacao,$cancelar,$remarcar,$s['id']]); professional_me($pdo);
+    $q=$pdo->prepare('UPDATE profissionais SET nome=?,cnpj=?,especialidade=?,registro_profissional=?,telefone=?,whatsapp=?,endereco=?,modalidade=?,apresentacao=?,logo_arquivo=?,horario_funcionamento=?,aviso_publico=?,mensagem_pos_venda=?,cor_primaria=COALESCE(?,cor_primaria),cor_secundaria=COALESCE(?,cor_secundaria),valor_consulta=?,limite_diario=?,confirmacao_automatica=?,cancelamento_ate_horas=?,remarcacao_ate_horas=? WHERE id=?');
+    $q->execute([$nome,$v[0],$v[1],$v[2],$v[3],$v[4],$v[5],$v[6],$v[7],$v[8],$v[9],$v[10],$v[11],$v[12],$v[13],$data['valor_consulta']??null,$limite,$confirmacao,$cancelar,$remarcar,$s['id']]); professional_me($pdo);
 }
 function professional_update_relationship_message(PDO $pdo,array $data): never {
     $s=require_professional(); $message=trim((string)($data['mensagem_pos_venda']??''));
@@ -625,25 +618,17 @@ function professional_log_relationship(PDO $pdo,array $data): never {
 function professional_create_appointment(PDO $pdo,array $data): never {
     $s=require_professional();$patient=(int)($data['patient_id']??0);$date=required_string($data,'data_consulta');$time=trim((string)($data['horario']??''));
     if(!valid_date($date)||!preg_match('/^([01]\d|2[0-3]):[0-5]\d$/',$time))json_response(['success'=>false,'message'=>'Data ou horário inválido.'],422);
-    $newName=trim((string)($data['patient_name']??''));$newPhone=trim((string)($data['patient_phone']??''));$newEmail=strtolower(trim((string)($data['patient_email']??'')));
-    $isNew=$patient<1;
-    if($isNew&&($newName===''||strlen($newName)>150||$newPhone===''||strlen($newPhone)>30||($newEmail!==''&&!filter_var($newEmail,FILTER_VALIDATE_EMAIL))))json_response(['success'=>false,'message'=>'Para cadastrar o cliente, informe nome e celular válidos; o e-mail é opcional.'],422);
-    if(!$isNew)assert_prof_patient($pdo,$s['id'],$patient);else enforce_professional_patient_limit($pdo,(int)$s['id']);
-    $pdo->beginTransaction();
+    assert_prof_patient($pdo,$s['id'],$patient);$pdo->beginTransaction();
     try {
         $lock=$pdo->prepare('SELECT id FROM profissionais WHERE id=? FOR UPDATE');$lock->execute([$s['id']]);
         $slots=professional_slots($pdo,(int)$s['id'],$date);$slot=null;foreach($slots as $candidate){if($candidate['horario']===$time){$slot=$candidate;break;}}
         if(!$slot){$pdo->rollBack();json_response(['success'=>false,'message'=>'O horário não está disponível na agenda configurada.'],409);}
-        if($isNew){
-            $q=$pdo->prepare('INSERT INTO pacientes (codigo,nome,telefone,email,cpf,sus,ubs_id) VALUES (NULL,?,?,?,NULL,NULL,NULL)');$q->execute([$newName,$newPhone,$newEmail?:null]);$patient=(int)$pdo->lastInsertId();
-            $link=$pdo->prepare('INSERT INTO profissional_pacientes (profissional_id,paciente_id) VALUES (?,?)');$link->execute([$s['id'],$patient]);
-        }
         $id='P'.date('YmdHis').bin2hex(random_bytes(3));
         $q=$pdo->prepare("INSERT INTO consultas_profissionais (id,profissional_id,paciente_id,data_consulta,horario,duracao_minutos,assunto,valor,status,confirmada_em) VALUES (?,?,?,?,?,?,?,?,'confirmada',NOW())");
         $q->execute([$id,$s['id'],$patient,$date,$time,(int)$slot['duracao'],trim((string)($data['assunto']??''))?:null,$data['valor']??null]);$pdo->commit();
         criar_notificacoes_profissionais($pdo,(int)$s['id'],$patient,$id,$date,$time,'','');
-        audit_professional_event($pdo,(int)$s['id'],'agendamento_criado','consultas_profissionais',$id,['patient_id'=>$patient,'novo_cliente'=>$isNew]);
-        json_response(['success'=>true,'appointment_id'=>$id,'status'=>'confirmada','patient_id'=>$patient]);
+        audit_professional_event($pdo,(int)$s['id'],'agendamento_criado','consultas_profissionais',$id,['patient_id'=>$patient]);
+        json_response(['success'=>true,'appointment_id'=>$id,'status'=>'confirmada']);
     } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 function criar_notificacoes_profissionais(PDO $pdo,int $profissionalId,int $pacienteId,string $consultaId,string $date,string $time,string $nome='',string $clinica=''): void {
