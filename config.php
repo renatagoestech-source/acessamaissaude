@@ -98,6 +98,8 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
     $addColumn('profissionais', 'horario_funcionamento', 'VARCHAR(180) NULL AFTER logo_arquivo');
     $addColumn('profissionais', 'aviso_publico', 'TEXT NULL AFTER horario_funcionamento');
     $addColumn('profissionais', 'mensagem_pos_venda', 'TEXT NULL AFTER aviso_publico');
+    $addColumn('profissionais', 'instagram_url', 'VARCHAR(255) NULL AFTER whatsapp');
+    try { $pdo->exec('ALTER TABLE `pacientes` MODIFY `sus` VARCHAR(40) NULL'); } catch (Throwable $ignored) {}
     $addColumn('profissionais', 'limite_diario', 'INT UNSIGNED NOT NULL DEFAULT 12 AFTER mensagem_pos_venda');
     try { $pdo->exec("UPDATE profissionais SET slug = CONCAT('profissional-', id) WHERE slug IS NULL OR slug = ''"); $pdo->exec("ALTER TABLE profissionais MODIFY slug VARCHAR(160) NOT NULL UNIQUE"); } catch (Throwable $ignored) {}
     $addColumn('consultas', 'assunto', 'TEXT NULL AFTER especialidade');
