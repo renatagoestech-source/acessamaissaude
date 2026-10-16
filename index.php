@@ -3,7 +3,7 @@
 $styleAssetVersion = substr(hash_file('sha256', __DIR__ . '/style.css') ?: '1', 0, 16);
 $scriptAssetVersion = substr(hash_file('sha256', __DIR__ . '/script.js') ?: '1', 0, 16);
 $requestPath = (string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-if (preg_match('~/conheca/?$~', $requestPath)) {
+if (preg_match('~/conheca/?$~', $requestPath) || (string)($_GET['pagina'] ?? '') === 'conheca') {
     require __DIR__ . '/conheca.php';
     exit;
 }
