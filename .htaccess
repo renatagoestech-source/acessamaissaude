@@ -2,6 +2,7 @@ Options -Indexes
 DirectoryIndex index.php
 
 RewriteEngine On
+RewriteRule ^conheca/?$ index.php [QSA,L]
 RewriteRule ^ubs/?$ index.php?portal=ubs [QSA,L]
 RewriteRule ^clinica/?$ index.php?portal=clinica [QSA,L]
 

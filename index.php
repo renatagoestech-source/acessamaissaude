@@ -3,6 +3,10 @@
 $styleAssetVersion = substr(hash_file('sha256', __DIR__ . '/style.css') ?: '1', 0, 16);
 $scriptAssetVersion = substr(hash_file('sha256', __DIR__ . '/script.js') ?: '1', 0, 16);
 $requestPath = (string)parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+if (preg_match('~/conheca/?$~', $requestPath)) {
+    require __DIR__ . '/conheca.php';
+    exit;
+}
 $portalPath = rtrim($requestPath, '/');
 $portalQuery = strtolower(trim((string)($_GET['portal'] ?? '')));
 $portalFromPath = $portalPath === '/ubs' ? 'ubs' : ($portalPath === '/clinica' ? 'clinica' : '');
@@ -287,6 +291,7 @@ if ($appPortal !== '' && $requestPath !== $portalPath) {
     <h2>Conectando pessoas à saúde.</h2>
     <p>© 2026 Acessa+ Saúde. Todos os direitos reservados.</p>
     <p>Desenvolvido por Renata Goes e Welson Pereira.</p>
+    <p><a href="/conheca">Conheça a Acessa+ Saúde</a></p>
     <p class="site-footer-contact">Contato: <a href="mailto:acessamaissaude@gmail.com">acessamaissaude@gmail.com</a></p>
 </footer>
 <div id="professionalResetModal" class="modal hidden"><div class="modal-content"><button type="button" class="close" onclick="fecharRedefinicaoSenha()">×</button><span class="eyebrow">SEGURANÇA DA CONTA</span><h2>Definir nova senha</h2><p class="subtitle">Use uma senha com pelo menos 8 caracteres. O link recebido por e-mail é de uso único e expira em 1 hora.</p><input id="professionalResetToken" type="hidden"><label>Nova senha</label><input id="professionalNewPassword" type="password" minlength="8" autocomplete="new-password"><label>Confirme a nova senha</label><input id="professionalConfirmPassword" type="password" minlength="8" autocomplete="new-password"><button type="button" class="btn primary full" onclick="confirmarRedefinicaoSenha()">Redefinir senha</button></div></div>

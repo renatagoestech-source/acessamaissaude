@@ -12,6 +12,10 @@
   },
   "routes": [
     {
+      "src": "/conheca/?$",
+      "dest": "/api/index.php"
+    },
+    {
       "src": "/ubs/?$",
       "dest": "/api/index.php?portal=ubs"
     },
