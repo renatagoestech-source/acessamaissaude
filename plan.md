@@ -30,3 +30,9 @@ Reutilizar o sistema visual Acessa+ Saúde: interface clínica clara, verde/azul
 - Nenhuma integração com e-SUS APS, SMS ou WhatsApp Business será declarada como ativa sem autorização, especificação técnica, provedor e credenciais. O fluxo demonstrável usa notificações internas e compartilhamento manual de mensagem.
 - Os dados e indicadores históricos presentes no PDF (2025, PSI, tempos de espera) não serão inseridos como dados reais do sistema; precisam ser validados na fonte oficial antes de divulgação.
 - O checkpoint de origem fica na tag/branch `checkpoint/pre-acessa-mais-saude-inteligente-2026-11-06` (SHA `b5705c551da8f5a0a455eea171a6bbccb9716e97`). A implementação permanecerá em branch separada; nenhuma publicação de produção será feita neste trabalho.
+
+
+## Estado de homologação — 6 de novembro de 2026
+- A migration PostgreSQL `20261106_fila_viva` foi aplicada no projeto Supabase `acessamaissaude`, que o usuário confirmou como staging; histórico, colunas e RLS das duas tabelas novas foram verificados.
+- Nenhuma migration, configuração de ambiente ou publicação foi feita em produção.
+- O deploy/Preview permanece pendente: a Vercel não tem `DATABASE_URL` de Preview. É necessário configurar uma URL sensível do staging, limitada à branch de avaliação, sem reutilizar credenciais de produção; depois executar smoke tests.

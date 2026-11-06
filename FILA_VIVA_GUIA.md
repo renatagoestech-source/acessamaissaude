@@ -81,11 +81,12 @@ O módulo aplica autorização no servidor, escopo por UBS e cidade para contas 
 
 ## Migração e validação técnica
 
-- **MySQL/TiDB:** as alterações aditivas estão incluídas no bootstrap `config.php` e serão aplicadas quando uma instância atualizada fizer a conexão. Antes de publicar, obter backup testado e validar em cópia/homologação.
-- **Supabase/PostgreSQL:** aplicar manualmente `migrations/20261106_fila_viva.sql` no SQL Editor, após backup e validação de compatibilidade. O bootstrap PHP não executa DDL neste caminho.
+- **MySQL/TiDB:** as alterações aditivas estão incluídas no bootstrap `config.php` e serão aplicadas quando uma instância atualizada fizer a conexão. Não foram executadas em produção; antes de publicar, obter backup testado e validar em cópia/homologação.
+- **Supabase/PostgreSQL:** `migrations/20261106_fila_viva.sql` foi aplicada em 6 de novembro de 2026 ao projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. O registro da migration, as colunas esperadas e RLS nas duas tabelas novas foram verificados. A migration é aditiva e também preenche `encaminhado_em` nas entradas legadas. A produção não foi alterada.
+- **Vercel Preview:** ainda não conectado ao banco de homologação. Falta configurar `DATABASE_URL` como variável sensível, somente no escopo Preview e para a branch de avaliação; não reutilizar as variáveis TiDB de produção.
 - **Instalação nova:** `database.sql` contém `DROP DATABASE`; nunca executar sobre uma base existente.
-- **Testes concluídos neste trabalho:** `php -l` em todos os arquivos PHP, `node --check script.js` e `git diff --check` sem erro.
-- **Teste ainda necessário:** smoke test CRUD/concorrência e validação de permissões em cópia de homologação com versão e banco reais. Nenhuma escrita foi feita em base compartilhada ou de produção.
+- **Testes concluídos neste trabalho:** lint de todos os arquivos PHP, `node --check script.js`, `git diff --check`, testes `postgres_compat`, `postgres_session_handler`, `professional_session` e `frontend_helpers`.
+- **Teste ainda necessário:** configurar o Preview para conectar ao Supabase de homologação e executar smoke test CRUD/concorrência, permissões por perfil, expiração, aceite/recusa, falta, cancelamento e reagendamento. Não foi confirmado backup/snapshot do staging nesta sessão; fazê-lo antes de novos testes com escrita.
 
 ## Preparação para envio ao edital
 

@@ -8,7 +8,7 @@ ALTER TABLE public.lista_espera
     ADD COLUMN IF NOT EXISTS protocolo VARCHAR(32) NULL,
     ADD COLUMN IF NOT EXISTS prioridade_categoria VARCHAR(120) NULL,
     ADD COLUMN IF NOT EXISTS prioridade_observacao VARCHAR(255) NULL,
-    ADD COLUMN IF NOT EXISTS prioridade_validada_por INTEGER NULL,
+    ADD COLUMN IF NOT EXISTS prioridade_validada_por BIGINT NULL,
     ADD COLUMN IF NOT EXISTS prioridade_validada_em TIMESTAMP NULL;
 
 UPDATE public.lista_espera
@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS public.fila_viva_vagas (
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+ALTER TABLE public.fila_viva_vagas ENABLE ROW LEVEL SECURITY;
+
 CREATE INDEX IF NOT EXISTS idx_fila_viva_vagas_filtro
     ON public.fila_viva_vagas (ubs_id, especialidade, data_consulta, status, criado_em);
 
@@ -55,6 +57,8 @@ CREATE TABLE IF NOT EXISTS public.fila_viva_ofertas (
     criado_em TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     resposta_em TIMESTAMP NULL
 );
+
+ALTER TABLE public.fila_viva_ofertas ENABLE ROW LEVEL SECURITY;
 
 CREATE INDEX IF NOT EXISTS idx_fila_viva_oferta_vaga_status
     ON public.fila_viva_ofertas (vaga_id, status);

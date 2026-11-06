@@ -13,5 +13,10 @@
 - [x] **Preparação do piloto Triunfo–PE** — Guia com etapas, decisões municipais, métricas e pontos do edital. Especialidades, regras, cronograma, equipe e custos aguardam pactuação com a Secretaria.
 - [x] **Migração compatível** — Bootstrap aditivo MySQL/TiDB e SQL manual PostgreSQL/Supabase; migração não executada em produção.
 - [x] **Checkpoint de recuperação** — `checkpoint/pre-acessa-mais-saude-inteligente-2026-11-06`, SHA `b5705c551da8f5a0a455eea171a6bbccb9716e97`.
-- [ ] **Validação de homologação** — Executar smoke test com banco clone, dois perfis UBS e conta Secretaria, incluindo concorrência de oferta, expiração, recusa, aceite, falta, cancelamento, reagendamento e segregação municipal.
+- [ ] **Validação de homologação** — Após configurar o Preview para o Supabase de staging, executar smoke test com dois perfis UBS e conta Secretaria, incluindo concorrência de oferta, expiração, recusa, aceite, falta, cancelamento, reagendamento e segregação municipal.
 - [ ] **Implantação oficial** — Depende de autorização da Secretaria, backup verificado, migração aplicada, análise de segurança e configuração da infraestrutura/provedores.
+
+
+## Status de homologação — 6 de novembro de 2026
+
+A migration PostgreSQL `20261106_fila_viva` foi aplicada no projeto Supabase `acessamaissaude`, confirmado pelo usuário como staging; histórico, colunas e RLS das duas tabelas novas foram verificados. A produção permanece intocada. O Vercel Preview ainda precisa da variável sensível `DATABASE_URL` do staging, limitada ao Preview/branch de avaliação; depois disso, executar smoke tests end-to-end.

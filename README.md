@@ -89,3 +89,8 @@ A branch de trabalho `feature/acessa-mais-saude-inteligente` inclui encaminhamen
 O módulo não diagnostica, não calcula prioridade e não ordena pacientes automaticamente. Horários por profissional não existem no cadastro atual; a ocupação é estimada pelo limite diário da UBS. A equipe deve confirmar o horário após o aceite do paciente. SMS/WhatsApp automático e e-SUS APS **não estão integrados**; mensagens ficam pendentes para contato manual.
 
 Antes de usar dados reais, valide em homologação, faça e teste backup, revise acessos/LGPD e aplique a migração apropriada. MySQL/TiDB receberá alterações aditivas pelo bootstrap PHP na primeira conexão com a versão atualizada. Supabase/PostgreSQL requer aplicação manual de `migrations/20261106_fila_viva.sql`. Nenhuma migração de produção foi executada neste trabalho.
+
+
+## Estado de homologação da Fila Viva — 6 de novembro de 2026
+
+A migration `20261106_fila_viva` foi aplicada ao projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. O histórico, as colunas adicionadas e o RLS das tabelas novas foram verificados. Nenhum deploy ou alteração no banco de produção foi feito. O Preview Vercel ainda requer `DATABASE_URL` do staging, marcada como sensível e restrita ao ambiente Preview/branch de avaliação; não reutilize `TIDB_*`/`DATABASE_URL` de produção. O smoke test end-to-end permanece pendente até essa configuração.
