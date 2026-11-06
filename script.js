@@ -75,6 +75,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     sessionStorage.removeItem(STORAGE_PATIENT);
 
     await carregarDados();
+    const filaVivaOfferMatch = location.hash.match(/^#fila-viva-offer=([a-f0-9]{64})$/i);
+    if (filaVivaOfferMatch) await abrirRespostaOfertaFilaViva(filaVivaOfferMatch[1]);
 
     if (verifyToken && databaseReady) {
         try { const v = await api("professional_verify_email", {params:{token:verifyToken}}); toast(v.message); }
@@ -1628,6 +1630,7 @@ function abrirAbaAdmin(aba) {
 
     $("adminConsultas")
         .classList.add("hidden");
+    $("adminFilaViva")?.classList.add("hidden");
     if($("adminWaitlist")) $("adminWaitlist").classList.add("hidden");
 
     $("adminSuporte")
@@ -1643,6 +1646,7 @@ function abrirAbaAdmin(aba) {
     $("adminSecretariaAccounts")?.classList.add("hidden");
 
     if (aba === "waitlist" && $("adminWaitlist")) { $("adminWaitlist").classList.remove("hidden"); carregarListaEsperaUBS(); }
+    if (aba === "fila-viva" && $("adminFilaViva")) { $("adminFilaViva").classList.remove("hidden"); carregarFilaViva(); }
     if (aba === "secretaria" && adminSession?.tipo === "secretaria") { $("adminSecretariaDashboard").classList.remove("hidden"); carregarPainelSecretaria(); }
     if (aba === "secretaria-accounts" && adminSession?.tipo === "desenvolvedor") { $("adminSecretariaAccounts").classList.remove("hidden"); carregarContasSecretaria(); }
 
@@ -2383,7 +2387,7 @@ async function renderConsultasAdmin() {
                         )}
                         às
                         ${escapeHTML(
-                            consulta.horario
+                            ['00:00:00','00:00'].includes(consulta.horario) ? 'horário a confirmar pela UBS' : consulta.horario
                         )}
                     </p>
 
@@ -3287,3 +3291,325 @@ document.addEventListener(
 /* ============================================================
    FIM
    ============================================================ */
+
+
+/* ============================================================
+   FILA VIVA — encaminhamentos e reposição controlada de vagas
+   ============================================================ */
+let filaVivaDashboard = null;
+let filaVivaOfferToken = '';
+
+function filaVivaSafeInlineArg(value) {
+    return encodeURIComponent(String(value)).replace(/[!'()*]/g, ch => '%' + ch.charCodeAt(0).toString(16));
+}
+function filaVivaDecodeArg(value) {
+    try { return decodeURIComponent(String(value)); } catch (_e) { return ''; }
+}
+function filaVivaEmpty(text) {
+    return `<div class="fv-empty">${escapeHTML(text)}</div>`;
+}
+function filaVivaDateLabel(value) {
+    if (!value) return '—';
+    const date = String(value).slice(0, 10);
+    return formatarDataBR(date) || escapeHTML(date);
+}
+function filaVivaStatusLabel(status) {
+    const labels = {pendente:'Na fila',agendado:'Agendada',atendido:'Realizada',faltou:'Falta registrada',cancelado:'Cancelada',disponivel:'Disponível',ofertada:'Oferta pendente',preenchida:'Preenchida',confirmada:'Confirmada'};
+    return labels[status] || status || '—';
+}
+function filaVivaSelectOptions(select, rows, valueKey, labelKey, firstLabel, selectedValue = '') {
+    if (!select) return;
+    const values = [`<option value="">${escapeHTML(firstLabel)}</option>`];
+    (rows || []).forEach(row => {
+        const value = String(row[valueKey] ?? '');
+        if (!value) return;
+        values.push(`<option value="${escapeHTML(value)}" ${value === String(selectedValue) ? 'selected' : ''}>${escapeHTML(row[labelKey] ?? value)}</option>`);
+    });
+    select.innerHTML = values.join('');
+}
+function filaVivaPopulateDestinations(units, previousOrigin = '', previousTarget = '') {
+    const origin = $('fvOrigin');
+    const target = $('fvTarget');
+    const unitRows = units || [];
+    filaVivaSelectOptions(origin, unitRows, 'id', 'nome', 'Selecione a UBS de origem', previousOrigin);
+    filaVivaSelectOptions(target, unitRows, 'id', 'nome', 'Selecione a unidade de destino', previousTarget);
+    if (adminSession?.tipo === 'ubs') {
+        if (origin) origin.value = String(adminSession.ubsId || '');
+        if ($('fvOriginField')) $('fvOriginField').classList.add('hidden');
+        const own = unitRows.find(u => String(u.id) === String(adminSession.ubsId));
+        if (target && !target.value) {
+            const other = unitRows.find(u => String(u.id) !== String(adminSession.ubsId));
+            target.value = String(other?.id || own?.id || '');
+        }
+    } else {
+        if ($('fvOriginField')) $('fvOriginField').classList.remove('hidden');
+        if (origin && !origin.value) origin.value = String(previousOrigin || $('fvFilterUnit')?.value || unitRows[0]?.id || '');
+        if (target && !target.value) target.value = String(previousTarget || unitRows[0]?.id || '');
+    }
+    atualizarEspecialidadesDestinoFilaViva();
+}
+function atualizarEspecialidadesDestinoFilaViva() {
+    const targetId = String($('fvTarget')?.value || '');
+    const units = filaVivaDashboard?.unidadesDestino || [];
+    const unit = units.find(u => String(u.id) === targetId);
+    const select = $('fvReferralSpecialty');
+    if (!select) return;
+    const previous = select.value;
+    const specs = (unit?.especialidades || []).map(nome => ({nome}));
+    filaVivaSelectOptions(select, specs, 'nome', 'nome', 'Selecione a especialidade', previous);
+}
+function inicializarFiltrosFilaViva() {
+    if (!$('fvStart') || !$('fvEnd')) return;
+    if (!$('fvEnd').value) $('fvEnd').value = hojeISO();
+    if (!$('fvStart').value) {
+        const date = new Date(); date.setDate(date.getDate() - 89);
+        $('fvStart').value = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;
+    }
+    if ($('fvReferralDate')) { $('fvReferralDate').min = hojeISO(); if (!$('fvReferralDate').value) $('fvReferralDate').value = hojeISO(); }
+    if ($('fvSus') && !$('fvSus').dataset.masked) {
+        $('fvSus').dataset.masked = '1';
+        $('fvSus').addEventListener('input', function(){ this.value = this.value.replace(/\D/g, '').slice(0, 15); });
+    }
+}
+async function carregarFilaViva() {
+    if (!adminSession || !$('adminFilaViva')) return;
+    inicializarFiltrosFilaViva();
+    const unitSelect = $('fvFilterUnit');
+    const oldUnit = unitSelect?.value || '';
+    const unitId = adminSession.tipo === 'ubs' ? String(adminSession.ubsId || '') : oldUnit;
+    if ($('fvFilterUnitField')) $('fvFilterUnitField').classList.toggle('hidden', adminSession.tipo === 'ubs');
+    const params = {
+        ubs_id: unitId,
+        inicio: $('fvStart')?.value || '',
+        fim: $('fvEnd')?.value || '',
+        especialidade: $('fvFilterSpecialty')?.value || ''
+    };
+    const referralsBox = $('fvReferrals');
+    if (referralsBox) referralsBox.innerHTML = '<div class="info-box">Carregando dados do período…</div>';
+    try {
+        const data = await api('fila_viva_dashboard', {params});
+        filaVivaDashboard = data;
+        const units = data.ubs || [];
+        const targets = data.unidadesDestino || [];
+        if (unitSelect && adminSession.tipo !== 'ubs') {
+            const keep = units.some(u => String(u.id) === oldUnit) ? oldUnit : '';
+            filaVivaSelectOptions(unitSelect, units, 'id', 'nome', 'Todas as unidades do escopo', keep);
+        } else if (unitSelect && adminSession.tipo === 'ubs') unitSelect.value = String(adminSession.ubsId || '');
+        const specialtySelect = $('fvFilterSpecialty');
+        if (specialtySelect) {
+            const keepSpecialty = (data.especialidades || []).includes(params.especialidade) ? params.especialidade : '';
+            filaVivaSelectOptions(specialtySelect, (data.especialidades || []).map(nome => ({nome})), 'nome', 'nome', 'Todas', keepSpecialty);
+        }
+        filaVivaPopulateDestinations(targets, $('fvOrigin')?.value || '', $('fvTarget')?.value || '');
+        renderMetricasFilaViva(data.metrics || {});
+        renderEvolucaoFilaViva(data.evolucaoMensal || []);
+        renderEncaminhamentosFilaViva(data.encaminhamentos || []);
+        renderVagasFilaViva(data.vagas || [], data.encaminhamentos || []);
+        renderConsultasFilaViva(data.consultas || []);
+    } catch (error) {
+        if (referralsBox) referralsBox.innerHTML = filaVivaEmpty(error.message || 'Não foi possível carregar os encaminhamentos.');
+        if ($('fvVacancies')) $('fvVacancies').innerHTML = filaVivaEmpty('Não foi possível carregar as vagas.');
+        if ($('fvAppointments')) $('fvAppointments').innerHTML = filaVivaEmpty('Não foi possível carregar as consultas.');
+        toast(error.message || 'Falha ao carregar a Fila Viva.');
+    }
+}
+function renderMetricasFilaViva(m) {
+    const num = value => Number(value || 0).toLocaleString('pt-BR');
+    const set = (id, value) => { if ($(id)) $(id).textContent = value; };
+    set('fvMetricReferrals', num(m.encaminhamentos));
+    set('fvMetricWaiting', num(m.pendentes));
+    set('fvMetricValidation', num(m.aguardandoValidacao));
+    const avg = m.tempoMedioEspera === null ? '—' : `${Number(m.tempoMedioEspera).toLocaleString('pt-BR')} d`;
+    const median = m.tempoMedianoEspera === null ? '—' : `${Number(m.tempoMedianoEspera).toLocaleString('pt-BR')} d`;
+    set('fvMetricWait', m.amostraEspera ? `${avg} / ${median}` : 'Indisponível');
+    set('fvMetricWaitSample', m.amostraEspera ? `${num(m.amostraEspera)} consultas realizadas (média / mediana)` : 'sem amostra suficiente');
+    set('fvMetricAppointments', `${num(m.agendadas)} / ${num(m.realizadas)}`);
+    set('fvMetricAbsences', num(m.faltas));
+    set('fvMetricNoShowRate', m.taxaFaltasRegistradas === null ? 'taxa indisponível' : `${Number(m.taxaFaltasRegistradas).toLocaleString('pt-BR')}% das consultas com desfecho registrado`);
+    set('fvMetricConfirmations', `${num(m.confirmadas)} / ${num(m.aguardandoConfirmacao)}`);
+    set('fvMetricConfirmationRate', m.taxaConfirmacao === null ? 'taxa indisponível' : `${Number(m.taxaConfirmacao).toLocaleString('pt-BR')}% confirmadas`);
+    set('fvMetricVacancies', `${num(m.vagasLiberadas)} / ${num(m.vagasReaproveitadas)}`);
+    const reuseRate = m.taxaReaproveitamento === null ? 'taxa indisponível' : `${Number(m.taxaReaproveitamento).toLocaleString('pt-BR')}% reaproveitadas`;
+    set('fvMetricReused', `${num(m.vagasDisponiveis)} disponíveis • ${num(m.vagasOfertadas)} ofertadas • ${num(m.vagasPreenchidas)} preenchidas • ${reuseRate}`);
+    set('fvMetricOccupancy', m.ocupacaoAgenda === null ? 'Indisponível' : `${Number(m.ocupacaoAgenda).toLocaleString('pt-BR')}%`);
+}
+function renderEvolucaoFilaViva(rows) {
+    const box = $('fvMonthly'); if (!box) return;
+    if (!rows.length) { box.innerHTML = filaVivaEmpty('Sem série mensal disponível para o período selecionado.'); return; }
+    const max = Math.max(1, ...rows.map(r => Math.max(Number(r.encaminhamentos || 0), Number(r.atendidos || 0))));
+    box.innerHTML = rows.map(row => {
+        const referrals = Number(row.encaminhamentos || 0), attended = Number(row.atendidos || 0);
+        const rw = referrals ? Math.max(3, Math.round(referrals / max * 100)) : 0;
+        const aw = attended ? Math.max(3, Math.round(attended / max * 100)) : 0;
+        return `<div class="fv-month-row"><strong>${escapeHTML(row.mes)}</strong><div class="fv-month-bars"><div class="fv-month-track" aria-label="${referrals} encaminhamentos"><i style="width:${rw}%"></i></div><div class="fv-month-track" aria-label="${attended} consultas realizadas"><i class="attended" style="width:${aw}%"></i></div></div><span class="fv-month-legend">${referrals} encaminh. • ${attended} realizadas</span></div>`;
+    }).join('');
+}
+function filaVivaDaysWaiting(value) {
+    if (!value) return null;
+    const date = new Date(`${String(value).slice(0,10)}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return null;
+    return Math.max(0, Math.floor((new Date().setHours(0,0,0,0) - date.getTime()) / 86400000));
+}
+function renderEncaminhamentosFilaViva(rows) {
+    const box = $('fvReferrals'); if (!box) return;
+    if (!rows.length) { box.innerHTML = filaVivaEmpty('Nenhum encaminhamento encontrado para estes filtros.'); return; }
+    box.innerHTML = rows.map(row => {
+        const pending = row.status === 'pendente';
+        const validated = !!row.prioridade_validada_em;
+        const displayStatus = row.status === 'agendado' && row.consulta_status ? row.consulta_status : row.status;
+        const badgeClass = displayStatus === 'cancelado' ? 'canceled' : ['agendado','atendido'].includes(displayStatus) ? 'done' : displayStatus === 'faltou' ? 'awaiting' : validated ? 'done' : 'awaiting';
+        const priority = validated ? `Categoria validada: ${escapeHTML(row.prioridade_categoria || 'registrada')} • por ${escapeHTML(row.validador || 'Secretaria')}` : 'Aguardando validação humana da Secretaria';
+        const days = filaVivaDaysWaiting(row.encaminhado_em);
+        const actions = [
+            pending && adminSession?.tipo === 'secretaria' ? `<button type="button" class="btn secondary" onclick="validarPrioridadeFilaViva(${Number(row.id)})">Validar categoria</button>` : '',
+            pending ? `<button type="button" class="btn danger" onclick="cancelarEncaminhamentoFilaViva(${Number(row.id)})">Cancelar solicitação</button>` : ''
+        ].filter(Boolean).join('');
+        return `<article class="fv-referral-card"><div class="fv-card-topline"><strong>${escapeHTML(row.protocolo || `FV-${row.id}`)} • ${escapeHTML(row.paciente || 'Paciente')}</strong><span class="fv-badge ${badgeClass}">${escapeHTML(filaVivaStatusLabel(displayStatus))}</span></div><div class="fv-card-meta"><p><strong>${escapeHTML(row.especialidade)}</strong> • ${escapeHTML(row.unidade || '')}</p><p>Origem: ${escapeHTML(row.origem || '—')} • Data solicitada: ${filaVivaDateLabel(row.data)}</p><p>${escapeHTML(priority)}${days !== null && pending ? ` • ${days} dia(s) aguardando` : ''}</p>${row.prioridade_observacao ? `<small>Observação administrativa: ${escapeHTML(row.prioridade_observacao)}</small>` : ''}</div>${actions ? `<div class="fv-actions">${actions}</div>` : ''}</article>`;
+    }).join('');
+}
+function renderVagasFilaViva(vacancies, referrals) {
+    const box = $('fvVacancies'); if (!box) return;
+    const result = $('fvOfferResult'); if (result) result.classList.add('hidden');
+    if (!vacancies.length) { box.innerHTML = filaVivaEmpty('Nenhuma vaga liberada registrada neste período. Vagas históricas anteriores à ativação do módulo não são recriadas automaticamente.'); return; }
+    box.innerHTML = vacancies.map(vacancy => {
+        const candidates = referrals.filter(r => r.status === 'pendente' && r.prioridade_validada_em && String(r.ubs_id) === String(vacancy.ubs_id) && String(r.especialidade) === String(vacancy.especialidade) && String(r.data).slice(0,10) === String(vacancy.data).slice(0,10));
+        let actions = '';
+        if (vacancy.status === 'disponivel' && candidates.length) {
+            const selectId = `fvCandidate_${Number(vacancy.id)}`;
+            actions = `<div class="fv-offer-controls"><div><label for="${selectId}">Escolha manual do candidato elegível</label><select id="${selectId}"><option value="">Selecione pessoa validada</option>${candidates.map(c => `<option value="${Number(c.id)}">${escapeHTML(c.paciente)} • ${escapeHTML(c.protocolo || `FV-${c.id}`)}</option>`).join('')}</select></div><button type="button" class="btn primary" onclick="ofertarVagaFilaViva(${Number(vacancy.id)},'${filaVivaSafeInlineArg(vacancy.id)}')">Oferecer vaga</button></div>`;
+        } else if (vacancy.status === 'disponivel') {
+            actions = `<p class="fv-note-inline">Não há solicitação correspondente com prioridade validada. Nenhum paciente será selecionado automaticamente.</p>`;
+        } else if (vacancy.status === 'ofertada' && vacancy.oferta) {
+            actions = `<p class="fv-note-inline">Oferta aguardando resposta de ${escapeHTML(vacancy.oferta.paciente || 'paciente')} até ${escapeHTML(vacancy.oferta.expira_em || '—')}.</p>`;
+        }
+        return `<article class="fv-vacancy-card"><div class="fv-card-topline"><strong>${escapeHTML(vacancy.unidade)} • ${escapeHTML(vacancy.especialidade)}</strong><span class="fv-badge ${vacancy.status === 'preenchida' ? 'done' : vacancy.status === 'ofertada' ? 'offered' : 'awaiting'}">${escapeHTML(filaVivaStatusLabel(vacancy.status))}</span></div><div class="fv-card-meta"><p>Data: ${filaVivaDateLabel(vacancy.data)} • criada ${escapeHTML(String(vacancy.criado_em || '').slice(0,16))}</p></div>${actions}</article>`;
+    }).join('');
+}
+async function criarEncaminhamentoFilaViva() {
+    if (!filaVivaDashboard || !adminSession) return;
+    const sus = $('fvSus')?.value.replace(/\D/g,'') || '';
+    const originId = adminSession.tipo === 'ubs' ? String(adminSession.ubsId || '') : String($('fvOrigin')?.value || '');
+    const targetId = String($('fvTarget')?.value || '');
+    const specialty = String($('fvReferralSpecialty')?.value || '');
+    const date = String($('fvReferralDate')?.value || '');
+    if (!sus || !originId || !targetId || !specialty || !date) { toast('Preencha Cartão SUS, origem, destino, especialidade e data.'); return; }
+    try {
+        const data = await api('fila_viva_create_referral', {method:'POST', body:{sus,origem_ubs_id:originId,ubs_id:targetId,especialidade:specialty,data_consulta:date}});
+        $('fvSus').value = '';
+        if ($('fvReferralResult')) $('fvReferralResult').textContent = `Protocolo ${data.protocolo}: encaminhamento registrado e aguardando validação.`;
+        toast(data.message || `Encaminhamento registrado: ${data.protocolo}`);
+        await carregarFilaViva();
+    } catch (error) { toast(error.message); }
+}
+async function validarPrioridadeFilaViva(id) {
+    if (adminSession?.tipo !== 'secretaria') { toast('A validação cabe à conta da Secretaria autorizada.'); return; }
+    const category = prompt('Informe a categoria/critério aprovado pela Secretaria (não inclua diagnóstico):', '');
+    if (category === null) return;
+    const note = prompt('Observação administrativa opcional (não inclua dados clínicos):', '');
+    if (note === null) return;
+    try {
+        const data = await api('fila_viva_validate_priority', {method:'POST', body:{id,prioridade_categoria:category.trim(),prioridade_observacao:note.trim()}});
+        toast(data.message || 'Validação registrada.');
+        await carregarFilaViva();
+    } catch (error) { toast(error.message); }
+}
+async function cancelarEncaminhamentoFilaViva(id) {
+    if (!confirm('Cancelar este encaminhamento pendente?')) return;
+    try { const data = await api('fila_viva_cancel_referral', {method:'POST',body:{id}}); toast(data.message || 'Solicitação cancelada.'); await carregarFilaViva(); }
+    catch (error) { toast(error.message); }
+}
+async function ofertarVagaFilaViva(vacancyId, encodedVacancyId) {
+    const select = $(`fvCandidate_${Number(filaVivaDecodeArg(encodedVacancyId))}`);
+    const candidateId = Number(select?.value || 0);
+    if (!candidateId) { toast('Selecione uma pessoa com prioridade validada.'); return; }
+    if (!confirm('Registrar oferta manual desta vaga para a pessoa selecionada? O sistema não enviará WhatsApp automaticamente.')) return;
+    try {
+        const data = await api('fila_viva_offer_candidate', {method:'POST',body:{vaga_id:Number(vacancyId),lista_espera_id:candidateId}});
+        const box = $('fvOfferResult');
+        if (box) {
+            let link = '';
+            try { const parsed = data.whatsapp_url ? new URL(data.whatsapp_url) : null; if (parsed && parsed.protocol === 'https:' && parsed.hostname === 'wa.me') link = `<p><a class="btn secondary" href="${escapeHTML(parsed.href)}" target="_blank" rel="noopener noreferrer">Abrir WhatsApp para envio manual</a></p>`; } catch (_e) {}
+            box.innerHTML = `<strong>Oferta registrada.</strong><p>${escapeHTML(data.message || '')}</p><p>${escapeHTML(data.note || 'Envie a mensagem manualmente.')}</p>${link}`;
+            box.classList.remove('hidden');
+        }
+        toast(data.note || 'Oferta registrada; comunicação manual pendente.');
+        await carregarFilaViva();
+        if (box) box.classList.remove('hidden');
+    } catch (error) { toast(error.message); }
+}
+function renderConsultasFilaViva(rows) {
+    const box = $('fvAppointments'); if (!box) return;
+    if (!rows.length) { box.innerHTML = filaVivaEmpty('Nenhuma consulta encontrada para o período.'); return; }
+    box.innerHTML = rows.map(row => {
+        const scheduled = row.status === 'agendado';
+        const outcomeAllowed = String(row.data || '').slice(0,10) <= hojeISO();
+        const confirmed = row.confirmacao_status === 'confirmada';
+        const badgeClass = row.status === 'cancelado' ? 'canceled' : row.status === 'atendido' ? 'done' : row.status === 'faltou' ? 'awaiting' : confirmed ? 'done' : 'awaiting';
+        let actions = '';
+        if (scheduled) actions = `<button type="button" class="btn ${confirmed ? 'secondary' : 'primary'}" onclick="alterarConfirmacaoFilaViva('${filaVivaSafeInlineArg(row.id)}','${confirmed ? 'pendente' : 'confirmada'}')">${confirmed ? 'Voltar a aguardando' : 'Registrar confirmação'}</button><button type="button" class="btn secondary" onclick="reagendarFilaViva('${filaVivaSafeInlineArg(row.id)}')">Reagendar</button>${outcomeAllowed ? `<button type="button" class="btn secondary" onclick="marcarStatusFilaViva('${filaVivaSafeInlineArg(row.id)}','atendido')">Marcar realizada</button><button type="button" class="btn secondary" onclick="marcarStatusFilaViva('${filaVivaSafeInlineArg(row.id)}','faltou')">Registrar falta</button>` : ''}<button type="button" class="btn danger" onclick="cancelarConsultaFilaViva('${filaVivaSafeInlineArg(row.id)}')">Cancelar</button>`;
+        return `<article class="fv-appointment-card"><div><div class="fv-card-topline"><strong>${escapeHTML(row.paciente || 'Paciente')} • ${escapeHTML(row.especialidade)}</strong><span class="fv-badge ${badgeClass}">${escapeHTML(row.status === 'agendado' ? (confirmed ? 'Confirmada' : 'Aguardando confirmação') : filaVivaStatusLabel(row.status))}</span></div><div class="fv-card-meta"><p>${escapeHTML(row.unidade)} • ${filaVivaDateLabel(row.data)}</p><p>Confirmação: ${escapeHTML(confirmed ? 'registrada após contato' : 'aguardando retorno')} • Horário: ${escapeHTML(!row.horario || ['00:00:00','00:00'].includes(row.horario) ? 'a confirmar pela UBS' : row.horario)}</p></div></div>${actions ? `<div class="fv-actions">${actions}</div>` : ''}</article>`;
+    }).join('');
+}
+async function alterarConfirmacaoFilaViva(encodedId, status) {
+    const id = filaVivaDecodeArg(encodedId);
+    try { const data = await api('fila_viva_update_confirmation',{method:'POST',body:{id,confirmacao_status:status}}); toast(data.message || 'Confirmação atualizada.'); await carregarFilaViva(); }
+    catch (error) { toast(error.message); }
+}
+async function marcarStatusFilaViva(encodedId, status) {
+    const id = filaVivaDecodeArg(encodedId);
+    if (status === 'faltou' && !confirm('Registrar que a pessoa não compareceu?')) return;
+    try { await api('fila_viva_update_appointment_status',{method:'POST',body:{id,status}}); toast(status === 'atendido' ? 'Consulta marcada como realizada.' : 'Falta registrada.'); await carregarFilaViva(); }
+    catch (error) { toast(error.message); }
+}
+async function cancelarConsultaFilaViva(encodedId) {
+    const id = filaVivaDecodeArg(encodedId);
+    const motivo = prompt('Motivo administrativo do cancelamento (opcional; não inclua diagnóstico):', '');
+    if (motivo === null) return;
+    try { await api('fila_viva_cancel_appointment',{method:'POST',body:{id,motivo:motivo.trim()}}); toast('Consulta cancelada; a vaga foi registrada para oferta controlada.'); await carregarFilaViva(); }
+    catch (error) { toast(error.message); }
+}
+async function reagendarFilaViva(encodedId) {
+    const id = filaVivaDecodeArg(encodedId);
+    const date = prompt('Informe a nova data (AAAA-MM-DD). A confirmação será reiniciada:', '');
+    if (date === null) return;
+    try { const data = await api('fila_viva_reschedule',{method:'POST',body:{id,data_consulta:date.trim()}}); toast(data.message || 'Consulta reagendada.'); await carregarFilaViva(); }
+    catch (error) { toast(error.message); }
+}
+async function abrirRespostaOfertaFilaViva(token) {
+    const modal = $('filaVivaOfferResponseModal');
+    const details = $('filaVivaOfferDetails');
+    if (!modal || !details) return;
+    filaVivaOfferToken = String(token || '');
+    modal.classList.remove('hidden');
+    if ($('filaVivaOfferActions')) $('filaVivaOfferActions').classList.add('hidden');
+    try {
+        const data = await api('fila_viva_offer_preview',{method:'POST',body:{token:filaVivaOfferToken}});
+        const offer = data.offer || {};
+        details.innerHTML = `<strong>Vaga disponível</strong><p>Especialidade: ${escapeHTML(offer.especialidade || '')}</p><p>Unidade: ${escapeHTML(offer.unidade || '')}</p><p>Data: ${filaVivaDateLabel(offer.data)}</p><p>Responda até: ${escapeHTML(offer.expira_em || '')}</p>`;
+        if ($('filaVivaOfferActions')) $('filaVivaOfferActions').classList.remove('hidden');
+    } catch (error) {
+        details.textContent = error.message || 'Não foi possível validar a oferta.';
+        filaVivaOfferToken = '';
+    }
+}
+async function responderOfertaFilaViva(decision) {
+    if (!filaVivaOfferToken || !['aceitar','recusar'].includes(decision)) return;
+    if (decision === 'aceitar' && !confirm('Confirmar o aceite da vaga e criar o agendamento?')) return;
+    const details = $('filaVivaOfferDetails');
+    if ($('filaVivaOfferActions')) $('filaVivaOfferActions').classList.add('hidden');
+    try {
+        const data = await api('fila_viva_offer_response',{method:'POST',body:{token:filaVivaOfferToken,decisao:decision}});
+        if (details) details.textContent = data.message || 'Sua resposta foi registrada.';
+        history.replaceState({}, '', location.pathname + location.search);
+        filaVivaOfferToken = '';
+    } catch (error) {
+        if (details) details.textContent = error.message || 'Não foi possível registrar a resposta.';
+        filaVivaOfferToken = '';
+    }
+}
+
+function fecharRespostaOfertaFilaViva() {
+    $('filaVivaOfferResponseModal')?.classList.add('hidden');
+    filaVivaOfferToken = '';
+    history.replaceState({}, '', location.pathname + location.search);
+}

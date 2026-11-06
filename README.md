@@ -80,3 +80,12 @@ A aba de assinatura está em modo demonstração e não cria cobrança real no A
 No XAMPP/Apache, as rotas são tratadas pelo `.htaccess`; na Vercel, estão declaradas em `vercel.json`. A home `/` continua disponível como seletor.
 
 Usuários UBS visualizam a equipe em modo somente leitura. Somente Secretaria e desenvolvedor podem criar, editar ou excluir funcionários; a API valida essa permissão além de ocultar os controles na interface.
+
+
+## Fila Viva — Acessa+ Saúde Inteligente
+
+A branch de trabalho `feature/acessa-mais-saude-inteligente` inclui encaminhamentos, fila por especialidade/unidade, validação humana de prioridade, ofertas controladas de vagas, confirmação/desfechos e indicadores. Veja o [guia operacional e de avaliação da Fila Viva](FILA_VIVA_GUIA.md) antes de preparar uma demonstração ou submissão.
+
+O módulo não diagnostica, não calcula prioridade e não ordena pacientes automaticamente. Horários por profissional não existem no cadastro atual; a ocupação é estimada pelo limite diário da UBS. A equipe deve confirmar o horário após o aceite do paciente. SMS/WhatsApp automático e e-SUS APS **não estão integrados**; mensagens ficam pendentes para contato manual.
+
+Antes de usar dados reais, valide em homologação, faça e teste backup, revise acessos/LGPD e aplique a migração apropriada. MySQL/TiDB receberá alterações aditivas pelo bootstrap PHP na primeira conexão com a versão atualizada. Supabase/PostgreSQL requer aplicação manual de `migrations/20261106_fila_viva.sql`. Nenhuma migração de produção foi executada neste trabalho.

@@ -119,6 +119,22 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
     $pdo->exec('CREATE TABLE IF NOT EXISTS lista_espera (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, paciente_id INT UNSIGNED NOT NULL, ubs_id VARCHAR(20) NOT NULL, especialidade VARCHAR(120) NOT NULL, data_consulta DATE NOT NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uq_lista_espera (paciente_id,ubs_id,especialidade,data_consulta)) ENGINE=InnoDB');
     $addColumn('lista_espera', 'status', "ENUM('pendente','agendado','cancelado') NOT NULL DEFAULT 'pendente' AFTER data_consulta");
     $addColumn('lista_espera', 'consulta_id', 'VARCHAR(60) NULL AFTER status');
+    $backfillReferralDate = !$columnExists('lista_espera', 'encaminhado_em');
+    $addColumn('lista_espera', 'encaminhado_em', 'DATETIME NULL');
+    $addColumn('lista_espera', 'origem_ubs_id', 'VARCHAR(20) NULL');
+    $addColumn('lista_espera', 'protocolo', 'VARCHAR(32) NULL');
+    $addColumn('lista_espera', 'prioridade_categoria', 'VARCHAR(120) NULL');
+    $addColumn('lista_espera', 'prioridade_observacao', 'VARCHAR(255) NULL');
+    $addColumn('lista_espera', 'prioridade_validada_por', 'INT UNSIGNED NULL');
+    $addColumn('lista_espera', 'prioridade_validada_em', 'DATETIME NULL');
+    if ($backfillReferralDate) $pdo->exec('UPDATE lista_espera SET encaminhado_em=COALESCE(encaminhado_em,criado_em) WHERE encaminhado_em IS NULL');
+    try { $pdo->exec('CREATE UNIQUE INDEX uq_lista_espera_fv_protocolo ON lista_espera (protocolo)'); } catch (Throwable $ignored) {}
+    try { $pdo->exec('CREATE INDEX idx_fv_lista_periodo ON lista_espera (ubs_id,especialidade,status,encaminhado_em)'); } catch (Throwable $ignored) {}
+    $addColumn('consultas', 'confirmacao_status', "VARCHAR(20) NOT NULL DEFAULT 'pendente'");
+    $addColumn('consultas', 'confirmada_em', 'DATETIME NULL');
+    try { $pdo->exec('CREATE INDEX idx_fv_consulta_confirmacao ON consultas (ubs_id,especialidade,data_consulta,confirmacao_status)'); } catch (Throwable $ignored) {}
+    $pdo->exec("CREATE TABLE IF NOT EXISTS fila_viva_vagas (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, cancelamento_consulta_id VARCHAR(60) NULL, ubs_id VARCHAR(20) NOT NULL, especialidade VARCHAR(120) NOT NULL, data_consulta DATE NOT NULL, status ENUM('disponivel','ofertada','preenchida') NOT NULL DEFAULT 'disponivel', criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uq_fila_viva_cancelamento (cancelamento_consulta_id), INDEX idx_fila_viva_vagas_filtro (ubs_id,especialidade,data_consulta,status,criado_em)) ENGINE=InnoDB");
+    $pdo->exec("CREATE TABLE IF NOT EXISTS fila_viva_ofertas (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, vaga_id BIGINT UNSIGNED NOT NULL, lista_espera_id BIGINT UNSIGNED NOT NULL, paciente_id INT UNSIGNED NOT NULL, token_hash CHAR(64) NOT NULL UNIQUE, status ENUM('pendente','aceita','recusada','expirada') NOT NULL DEFAULT 'pendente', expira_em DATETIME NOT NULL, criado_por INT UNSIGNED NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, resposta_em DATETIME NULL, INDEX idx_fila_viva_oferta_vaga_status (vaga_id,status), INDEX idx_fila_viva_oferta_expira (status,expira_em)) ENGINE=InnoDB");
     $pdo->exec('CREATE TABLE IF NOT EXISTS auditoria (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, admin_id INT UNSIGNED NULL, tipo_usuario VARCHAR(30) NULL, acao VARCHAR(100) NOT NULL, entidade VARCHAR(80) NULL, entidade_id VARCHAR(80) NULL, detalhes TEXT NULL, ip VARCHAR(45) NULL, criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX idx_auditoria_data (criado_em)) ENGINE=InnoDB');
     $pdo->exec("CREATE TABLE IF NOT EXISTS configuracao_app (id TINYINT UNSIGNED PRIMARY KEY, modo ENUM('ubs','profissional') NOT NULL DEFAULT 'ubs', nome_exibicao VARCHAR(150) NOT NULL DEFAULT 'Acessa+ Saúde', especialidade VARCHAR(150) NULL, registro_profissional VARCHAR(100) NULL, telefone VARCHAR(40) NULL, whatsapp VARCHAR(40) NULL, endereco VARCHAR(255) NULL, modalidade VARCHAR(100) NULL, valor_consulta DECIMAL(10,2) NULL, apresentacao TEXT NULL, logo_arquivo VARCHAR(255) NULL, horario_funcionamento VARCHAR(180) NULL, aviso_publico TEXT NULL, cor_primaria VARCHAR(20) NOT NULL DEFAULT '#0fa7a7', cor_secundaria VARCHAR(20) NOT NULL DEFAULT '#075b5d', atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) ENGINE=InnoDB");
     $pdo->exec('INSERT IGNORE INTO configuracao_app (id) VALUES (1)');
