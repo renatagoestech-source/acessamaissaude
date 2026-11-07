@@ -63,12 +63,14 @@ A aba de assinatura está em modo demonstração e não cria cobrança real no A
 - [Runtime PHP comunitário](https://github.com/vercel-community/php)
 - [PHP no Vercel com Docker](https://vercel.com/kb/guide/deploy-php-on-vercel-with-docker)
 
-## Suporte da clínica e gestão global da Secretaria
+## Suporte da clínica e escopo da Secretaria
 
 - Os chamados abertos a partir do link público de uma clínica são encaminhados primeiro à própria clínica. A clínica pode registrar uma resposta, resolver o chamado e, após a triagem/resposta, encaminhá-lo ao desenvolvedor com a descrição da falha técnica.
 - A marcação particular valida novamente o horário disponível no servidor e grava paciente, vínculo e consulta em transação para reduzir colisões de agenda.
-- O perfil **Secretaria** tem escopo global nas UBS: pode consultar e alterar dados de qualquer unidade, criar UBS e desativar/reativar unidades sem apagar o histórico. O painel agregado apresenta consultas do dia e metas de campanhas, vacinação e citologia; os valores de metas e realizados são cadastrados pela Secretaria.
-- A primeira conta global deve ser criada por um usuário **Desenvolvedor** autenticado, na aba **Administrador da Secretaria** do painel. Use uma senha forte de pelo menos 12 caracteres. Nenhuma senha padrão é embutida no repositório.
+- O perfil **Secretaria** não tem acesso global: lista, painel, fila, metas e ações são filtrados no servidor para as UBS atribuídas àquela conta e à cidade/UF cadastradas nela. Novas UBS criadas pela própria conta recebem o vínculo no servidor; não é possível enviar outro owner no formulário.
+- A primeira conta municipal deve ser criada por um usuário **Desenvolvedor** autenticado, na aba **Administrador da Secretaria** do painel. Use uma senha forte de pelo menos 12 caracteres. Nenhuma senha padrão é embutida no repositório.
+- UBS antigas só recebem owner automaticamente quando a auditoria comprova um único criador Secretaria e a cidade/UF ainda coincidem. Unidades sem prova ficam invisíveis; o Desenvolvedor só pode recuperar o vínculo para a conta criadora comprovada — nunca transferir para outra Secretaria por conveniência. A ação é auditada.
+- Consulte o [guia de escopo por Secretaria e vínculo seguro das UBS](SECRETARIA_SCOPE_GUIA.md) para a regra de acesso, migrações e tratamento das unidades legadas.
 - As migrações compatíveis de colunas e tabelas rodam pela aplicação ao conectar ao banco existente. `database.sql` serve apenas para instalação nova: começa com `DROP DATABASE`; **não o execute em uma base de produção existente**.
 
 
@@ -88,9 +90,9 @@ A branch de trabalho `feature/acessa-mais-saude-inteligente` inclui encaminhamen
 
 O módulo não diagnostica, não calcula prioridade e não ordena pacientes automaticamente. Horários por profissional não existem no cadastro atual; a ocupação é estimada pelo limite diário da UBS. A equipe deve confirmar o horário após o aceite do paciente. SMS/WhatsApp automático e e-SUS APS **não estão integrados**; mensagens ficam pendentes para contato manual.
 
-Antes de usar dados reais, valide em homologação, faça e teste backup, revise acessos/LGPD e aplique a migração apropriada. MySQL/TiDB receberá alterações aditivas pelo bootstrap PHP na primeira conexão com a versão atualizada. Supabase/PostgreSQL requer aplicação manual de `migrations/20261106_fila_viva.sql`. Nenhuma migração de produção foi executada neste trabalho.
+Antes de usar dados reais, valide em homologação, faça e teste backup, revise acessos/LGPD e aplique a migração apropriada. MySQL/TiDB recebe alterações aditivas pelo bootstrap PHP na primeira conexão com a versão atualizada. Supabase/PostgreSQL requer aplicação manual das migrations de `migrations/`; `20261106_fila_viva`, `20261107_secretaria_ubs_scope`, `20261107_secretaria_ubs_creator_guard` e `20261107_secretaria_ubs_location_guard` foram aplicadas somente no staging confirmado pelo usuário. Nenhuma migration ou publicação de produção foi feita neste trabalho.
 
 
 ## Estado de homologação da Fila Viva — 6 de novembro de 2026
 
-A migration `20261106_fila_viva` foi aplicada ao projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. O histórico, as colunas adicionadas e o RLS das tabelas novas foram verificados. Nenhum deploy ou alteração no banco de produção foi feito. O Preview Vercel ainda requer `DATABASE_URL` do staging, marcada como sensível e restrita ao ambiente Preview/branch de avaliação; não reutilize `TIDB_*`/`DATABASE_URL` de produção. O smoke test end-to-end permanece pendente até essa configuração.
+As migrations `20261106_fila_viva`, `20261107_secretaria_ubs_scope`, `20261107_secretaria_ubs_creator_guard` e `20261107_secretaria_ubs_location_guard` foram aplicadas ao projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. O owner é atribuído somente por autoria auditada e localização válida; unidades antigas sem prova permanecem sem owner. Para validar a revisão atual, publique a branch, confirme `DATABASE_URL` como segredo apenas no Preview/branch de avaliação e redeploy; o smoke test end-to-end ainda está pendente. Não promova para produção sem revisão, backup e autorização e não reutilize credenciais de produção.

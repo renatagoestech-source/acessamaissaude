@@ -5,7 +5,7 @@
 
 ## Resumo
 
-A branch `feature/acessa-mais-saude-inteligente` acrescenta ao Acessa+ Saúde um fluxo administrativo de encaminhamentos, fila por unidade/especialidade, validação humana de prioridade, registro de vagas liberadas, oferta controlada, resposta do paciente e indicadores gerenciais. O sistema não diagnostica, não calcula prioridade clínica e não reorganiza automaticamente a fila. A versão atual foi preparada para validação funcional com dados de teste; ainda não foi publicada nem conectada a uma base de produção.
+A branch `feature/acessa-mais-saude-inteligente` acrescenta ao Acessa+ Saúde um fluxo administrativo de encaminhamentos, fila por unidade/especialidade, validação humana de prioridade, registro de vagas liberadas, oferta controlada, resposta do paciente e indicadores gerenciais. O sistema não diagnostica, não calcula prioridade clínica e não reorganiza automaticamente a fila. A implementação está isolada da produção; a revisão de ownership ainda precisa ser enviada à branch e validada no Preview conectado ao staging.
 
 ## O que já está no código
 
@@ -69,7 +69,7 @@ O escopo sugerido pelo PDF é começar no Ambulatório de Especialidades Médica
 
 ## Privacidade, segurança e governança
 
-O módulo aplica autorização no servidor, escopo por UBS e cidade para contas da Secretaria, token de resposta armazenado com hash, validação CSRF nas operações, auditoria de ações e conteúdo de mensagem sem diagnóstico. A equipe deve revisar o controle de acesso do produto como um todo antes de dados reais.
+O módulo aplica autorização no servidor e exige, para cada conta Secretaria, UBS criada por ela e pertencente à sua cidade/UF. O owner é gravado no servidor; registros legados só são recuperados quando a auditoria comprova um criador único, e nem mesmo o Desenvolvedor pode transferir uma unidade para outra Secretaria. Também há token de resposta armazenado com hash, validação CSRF e auditoria. A equipe deve revisar o controle de acesso do produto como um todo antes de dados reais.
 
 **Ainda não substituído pelo código:** análise formal de LGPD e bases legais, acordo de responsabilidades entre Prefeitura e equipe, inventário e retenção/descarte, backups protegidos e testados, plano de resposta a incidentes, monitoramento/alertas, avaliação de vulnerabilidades e validação de segurança da infraestrutura. Até completar esses itens, usar somente registros fictícios ou ambiente de teste aprovado.
 
@@ -82,11 +82,11 @@ O módulo aplica autorização no servidor, escopo por UBS e cidade para contas 
 ## Migração e validação técnica
 
 - **MySQL/TiDB:** as alterações aditivas estão incluídas no bootstrap `config.php` e serão aplicadas quando uma instância atualizada fizer a conexão. Não foram executadas em produção; antes de publicar, obter backup testado e validar em cópia/homologação.
-- **Supabase/PostgreSQL:** `migrations/20261106_fila_viva.sql` foi aplicada em 6 de novembro de 2026 ao projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. O registro da migration, as colunas esperadas e RLS nas duas tabelas novas foram verificados. A migration é aditiva e também preenche `encaminhado_em` nas entradas legadas. A produção não foi alterada.
-- **Vercel Preview:** ainda não conectado ao banco de homologação. Falta configurar `DATABASE_URL` como variável sensível, somente no escopo Preview e para a branch de avaliação; não reutilizar as variáveis TiDB de produção.
+- **Supabase/PostgreSQL:** `migrations/20261106_fila_viva.sql`, `migrations/20261107_secretaria_ubs_scope.sql`, `migrations/20261107_secretaria_ubs_creator_guard.sql` e `migrations/20261107_secretaria_ubs_location_guard.sql` foram aplicadas no projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. Histórico, schema e owners existentes foram verificados; owner é mantido somente com autoria auditada única e cidade/UF válidas e compatíveis. Na verificação: 1 UBS vinculada, 5 sem owner, 0 owners sem prova e 0 incompatibilidades; as unidades sem prova ficam invisíveis. Produção não foi alterada.
+- **Vercel Preview:** a validação end-to-end ainda depende de `DATABASE_URL` do staging configurada como segredo somente no ambiente Preview e restrita à branch de avaliação; não reutilizar variáveis TiDB ou URL de produção. Depois do push e redeploy, executar o smoke test.
 - **Instalação nova:** `database.sql` contém `DROP DATABASE`; nunca executar sobre uma base existente.
-- **Testes concluídos neste trabalho:** lint de todos os arquivos PHP, `node --check script.js`, `git diff --check`, testes `postgres_compat`, `postgres_session_handler`, `professional_session` e `frontend_helpers`.
-- **Teste ainda necessário:** configurar o Preview para conectar ao Supabase de homologação e executar smoke test CRUD/concorrência, permissões por perfil, expiração, aceite/recusa, falta, cancelamento e reagendamento. Não foi confirmado backup/snapshot do staging nesta sessão; fazê-lo antes de novos testes com escrita.
+- **Testes locais concluídos:** lint de PHP, `node --check script.js`, `git diff --check`, testes `postgres_compat`, `postgres_session_handler`, `professional_session`, `frontend_helpers` e `secretaria_scope`.
+- **Teste end-to-end pendente:** configurar/confirmar o segredo do Preview para o Supabase de homologação e executar smoke test CRUD/concorrência, permissões por perfil, expiração, aceite/recusa, falta, cancelamento, reagendamento e isolamento entre contas. Não foi confirmado backup/snapshot do staging nesta etapa; obtê-lo antes de novos testes com escrita.
 
 ## Preparação para envio ao edital
 

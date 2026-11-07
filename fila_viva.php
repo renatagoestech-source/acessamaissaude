@@ -12,9 +12,7 @@ function fila_viva_require_scope(PDO $pdo, string $ubsId = ''): array
     if (!in_array(($session['tipo'] ?? ''), ['ubs', 'secretaria', 'desenvolvedor'], true)) {
         json_response(['success' => false, 'message' => 'Perfil sem permissão para acessar a Fila Viva.'], 403);
     }
-    if (($session['tipo'] ?? '') === 'secretaria' && (trim((string)($session['cidade'] ?? '')) === '' || !preg_match('/^[A-Za-z]{2}$/', trim((string)($session['estado'] ?? ''))))) {
-        json_response(['success' => false, 'message' => 'A conta da Secretaria precisa ter cidade e UF definidas antes de acessar a Fila Viva.'], 403);
-    }
+    if (($session['tipo'] ?? '') === 'secretaria') secretaria_account_scope($pdo, $session);
 
     if (($session['tipo'] ?? '') === 'ubs') {
         $own = trim((string)($session['ubs_id'] ?? ''));
@@ -38,17 +36,10 @@ function fila_viva_check_unit(PDO $pdo, array $session, string $ubsId): array
     $unit = $stmt->fetch();
     if (!$unit) json_response(['success' => false, 'message' => 'Unidade de saúde não encontrada.'], 404);
 
+    authorize_ubs($pdo, $ubsId);
+
     if (($session['tipo'] ?? '') === 'ubs' && (string)$session['ubs_id'] !== (string)$unit['id']) {
         json_response(['success' => false, 'message' => 'Você não tem permissão para acessar esta UBS.'], 403);
-    }
-
-    if (($session['tipo'] ?? '') === 'secretaria') {
-        $city = trim((string)($session['cidade'] ?? ''));
-        $state = strtoupper(trim((string)($session['estado'] ?? '')));
-        if ($city === '' || !preg_match('/^[A-Z]{2}$/', $state)) json_response(['success' => false, 'message' => 'A conta da Secretaria não possui escopo municipal válido.'], 403);
-        if (mb_strtolower($city, 'UTF-8') !== mb_strtolower(trim((string)$unit['cidade']), 'UTF-8') || $state !== strtoupper(trim((string)$unit['estado']))) {
-            json_response(['success' => false, 'message' => 'A unidade está fora do escopo municipal desta conta.'], 403);
-        }
     }
 
     return $unit;
@@ -86,12 +77,9 @@ function fila_viva_referral_targets(PDO $pdo, array $session): array
         $where .= ' AND u.cidade=? AND u.estado=?';
         $params = [(string)$unit['cidade'], (string)$unit['estado']];
     } elseif (($session['tipo'] ?? '') === 'secretaria') {
-        $city = trim((string)($session['cidade'] ?? ''));
-        $state = strtoupper(trim((string)($session['estado'] ?? '')));
-        if ($city !== '' || $state !== '') {
-            $where .= ' AND u.cidade=? AND u.estado=?';
-            $params = [$city, $state];
-        }
+        $scope = secretaria_account_scope($pdo, $session);
+        [$scopeSql, $params] = secretaria_ubs_scope_filter($scope, 'u');
+        $where .= ' AND ' . $scopeSql;
     }
     $query = $pdo->prepare('SELECT u.id,u.nome,u.cidade,u.estado,e.nome AS especialidade FROM ubs u LEFT JOIN ubs_especialidades e ON e.ubs_id=u.id' . $where . ' ORDER BY u.nome,e.nome');
     $query->execute($params);
@@ -104,22 +92,21 @@ function fila_viva_referral_targets(PDO $pdo, array $session): array
     return array_values($units);
 }
 
-function fila_viva_sql_city_scope(array $session, string $alias): array
+function fila_viva_sql_city_scope(PDO $pdo, array $session, string $alias): array
 {
     if (($session['tipo'] ?? '') !== 'secretaria') return ['', []];
-    $city = trim((string)($session['cidade'] ?? ''));
-    $state = strtoupper(trim((string)($session['estado'] ?? '')));
-    if ($city === '' && $state === '') return ['', []];
-    return [" AND {$alias}.cidade=? AND {$alias}.estado=?", [$city, $state]];
+    $scope = secretaria_account_scope($pdo, $session);
+    [$where, $params] = secretaria_ubs_scope_filter($scope, $alias);
+    return [' AND ' . $where, $params];
 }
 
-function fila_viva_require_secretaria(): array
+function fila_viva_require_secretaria(PDO $pdo): array
 {
     $session = require_admin();
     if (($session['tipo'] ?? '') !== 'secretaria') {
         json_response(['success' => false, 'message' => 'A validação de prioridade é exclusiva de uma conta da Secretaria formalmente autorizada.'], 403);
     }
-    if (trim((string)($session['cidade'] ?? '')) === '' || !preg_match('/^[A-Za-z]{2}$/', trim((string)($session['estado'] ?? '')))) json_response(['success' => false, 'message' => 'A conta da Secretaria precisa ter cidade e UF definidas.'], 403);
+    secretaria_account_scope($pdo, $session);
     return $session;
 }
 
@@ -191,7 +178,7 @@ function fila_viva_create_referral(PDO $pdo, array $data): never
 
 function fila_viva_validate_priority(PDO $pdo, array $data): never
 {
-    $session = fila_viva_require_secretaria();
+    $session = fila_viva_require_secretaria($pdo);
     $id = (int)($data['id'] ?? 0);
     $category = trim((string)($data['prioridade_categoria'] ?? ''));
     $note = trim((string)($data['prioridade_observacao'] ?? ''));
@@ -511,7 +498,7 @@ function fila_viva_dashboard(PDO $pdo): never
     $params = $dateParams;
     if ($ubsId !== '') { $where .= ' AND l.ubs_id=?'; $params[] = $ubsId; }
     if ($specialty !== '') { $where .= ' AND l.especialidade=?'; $params[] = $specialty; }
-    [$citySql, $cityParams] = fila_viva_sql_city_scope($session, 'u');
+    [$citySql, $cityParams] = fila_viva_sql_city_scope($pdo, $session, 'u');
 
     $unitsSql = 'SELECT u.id,u.nome,u.cidade,u.estado,u.limite_diario FROM ubs u WHERE u.ativa=1' . $citySql;
     $unitsQuery = $pdo->prepare($unitsSql . ' ORDER BY u.nome');

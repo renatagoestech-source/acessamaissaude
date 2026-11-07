@@ -9,11 +9,13 @@ CREATE TABLE IF NOT EXISTS ubs (
     endereco VARCHAR(255) NOT NULL,
     cidade VARCHAR(120) NOT NULL DEFAULT '',
     estado CHAR(2) NOT NULL DEFAULT '',
+    secretaria_id INT UNSIGNED NULL,
     telefone VARCHAR(30) NOT NULL,
     horario VARCHAR(100) NOT NULL,
     usuario VARCHAR(80) NOT NULL UNIQUE,
     ativa TINYINT(1) NOT NULL DEFAULT 1,
     limite_diario INT UNSIGNED NOT NULL DEFAULT 12,
+    INDEX idx_ubs_secretaria_municipio (secretaria_id, cidade, estado),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
@@ -169,6 +171,11 @@ CREATE TABLE IF NOT EXISTS administradores (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_admin_ubs FOREIGN KEY (ubs_id) REFERENCES ubs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+ALTER TABLE ubs
+    ADD CONSTRAINT fk_ubs_secretaria_owner
+    FOREIGN KEY (secretaria_id) REFERENCES administradores(id)
+    ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS indicadores_saude (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

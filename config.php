@@ -90,8 +90,15 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
     $addColumn('ubs', 'limite_diario', 'INT UNSIGNED NOT NULL DEFAULT 12 AFTER usuario');
     $addColumn('ubs', 'cidade', "VARCHAR(120) NOT NULL DEFAULT '' AFTER endereco");
     $addColumn('ubs', 'estado', "CHAR(2) NOT NULL DEFAULT '' AFTER cidade");
+    $addColumn('ubs', 'secretaria_id', 'INT UNSIGNED NULL AFTER estado');
     $addColumn('administradores', 'cidade', "VARCHAR(120) NOT NULL DEFAULT '' AFTER ubs_id");
     $addColumn('administradores', 'estado', "CHAR(2) NOT NULL DEFAULT '' AFTER cidade");
+    $ownerIndex = $pdo->prepare('SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = '.$quotedDb.' AND TABLE_NAME = ? AND INDEX_NAME = ?');
+    $ownerIndex->execute(['ubs', 'idx_ubs_secretaria_municipio']);
+    if (!(bool)$ownerIndex->fetchColumn()) $pdo->exec('CREATE INDEX idx_ubs_secretaria_municipio ON ubs (secretaria_id,cidade,estado)');
+    $ownerForeignKey = $pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = '.$quotedDb.' AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = ?');
+    $ownerForeignKey->execute(['ubs', 'fk_ubs_secretaria_owner', 'FOREIGN KEY']);
+    if (!(bool)$ownerForeignKey->fetchColumn()) $pdo->exec('ALTER TABLE ubs ADD CONSTRAINT fk_ubs_secretaria_owner FOREIGN KEY (secretaria_id) REFERENCES administradores(id) ON DELETE SET NULL');
     $addColumn('pacientes', 'email', 'VARCHAR(180) NULL AFTER telefone');
     $addColumn('profissionais', 'slug', 'VARCHAR(160) NULL AFTER email');
     $addColumn('profissionais', 'cnpj', 'VARCHAR(30) NULL AFTER slug');
@@ -210,6 +217,36 @@ function ensure_schema_compatibility(PDO $pdo, string $dbName): void
         $stmt=$pdo->prepare('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA='.$quotedDb.' AND TABLE_NAME=?');$stmt->execute([$table]);return (bool)$stmt->fetchColumn();
     };
     $pdo->exec("CREATE TABLE IF NOT EXISTS system_migrations (version VARCHAR(120) PRIMARY KEY, applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB");
+    $ownerBackfillDone = $pdo->query("SELECT 1 FROM system_migrations WHERE version='ubs_secretaria_owner_backfill_v1'")->fetchColumn();
+    if (!$ownerBackfillDone) {
+        $pdo->beginTransaction();
+        try {
+            $claimOwnerBackfill = $pdo->prepare("INSERT IGNORE INTO system_migrations (version) VALUES ('ubs_secretaria_owner_backfill_v1')");
+            $claimOwnerBackfill->execute();
+            if ($claimOwnerBackfill->rowCount() > 0 && $hasTable('auditoria')) {
+                $pdo->exec("UPDATE ubs u INNER JOIN (SELECT entidade_id,MIN(admin_id) AS admin_id FROM auditoria WHERE acao='ubs_criada' AND entidade='ubs' AND tipo_usuario='secretaria' AND admin_id IS NOT NULL AND entidade_id IS NOT NULL GROUP BY entidade_id HAVING COUNT(DISTINCT admin_id)=1) logged_owner ON logged_owner.entidade_id=u.id INNER JOIN administradores a ON a.id=logged_owner.admin_id AND a.tipo='secretaria' SET u.secretaria_id=a.id WHERE u.secretaria_id IS NULL AND TRIM(u.cidade)<>'' AND TRIM(a.cidade)<>'' AND TRIM(u.estado) REGEXP '^[A-Za-z]{2}$' AND TRIM(a.estado) REGEXP '^[A-Za-z]{2}$' AND LOWER(TRIM(u.cidade))=LOWER(TRIM(a.cidade)) AND UPPER(TRIM(u.estado))=UPPER(TRIM(a.estado))");
+            }
+            $pdo->commit();
+        } catch (Throwable $ownerMigrationError) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $ownerMigrationError;
+        }
+    }
+    $ownerIntegrityDone = $pdo->query("SELECT 1 FROM system_migrations WHERE version='ubs_secretaria_owner_integrity_v1'")->fetchColumn();
+    if (!$ownerIntegrityDone) {
+        $pdo->beginTransaction();
+        try {
+            $claimOwnerIntegrity = $pdo->prepare("INSERT IGNORE INTO system_migrations (version) VALUES ('ubs_secretaria_owner_integrity_v1')");
+            $claimOwnerIntegrity->execute();
+            if ($claimOwnerIntegrity->rowCount() > 0 && $hasTable('auditoria')) {
+                $pdo->exec("UPDATE ubs u LEFT JOIN (SELECT entidade_id,MIN(admin_id) AS admin_id FROM auditoria WHERE acao='ubs_criada' AND entidade='ubs' AND tipo_usuario='secretaria' AND admin_id IS NOT NULL AND entidade_id IS NOT NULL GROUP BY entidade_id HAVING COUNT(DISTINCT admin_id)=1) creator ON creator.entidade_id=u.id LEFT JOIN administradores a ON a.id=creator.admin_id AND a.tipo='secretaria' SET u.secretaria_id=NULL WHERE u.secretaria_id IS NOT NULL AND (a.id IS NULL OR u.secretaria_id<>a.id OR TRIM(u.cidade)='' OR TRIM(a.cidade)='' OR TRIM(u.estado) NOT REGEXP '^[A-Za-z]{2}$' OR TRIM(a.estado) NOT REGEXP '^[A-Za-z]{2}$' OR LOWER(TRIM(u.cidade))<>LOWER(TRIM(a.cidade)) OR UPPER(TRIM(u.estado))<>UPPER(TRIM(a.estado)))");
+            }
+            $pdo->commit();
+        } catch (Throwable $ownerIntegrityError) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $ownerIntegrityError;
+        }
+    }
     $splitDone=(bool)$pdo->query("SELECT 1 FROM system_migrations WHERE version='private_patient_tenant_split_v1'")->fetchColumn();
     if (!$splitDone && $hasTable('profissional_pacientes') && $hasTable('pacientes')) {
         $pdo->beginTransaction();

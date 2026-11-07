@@ -1553,6 +1553,8 @@ async function abrirPainelAdmin(){
     $("adminModal").classList.remove('hidden');
     const globalRole=['desenvolvedor','secretaria'].includes(adminSession.tipo);
     $("seletorDesenvolvedor").classList.toggle('hidden',!globalRole);
+    const unitSelectorLabel = $("seletorDesenvolvedor").querySelector("label");
+    if (unitSelectorLabel) unitSelectorLabel.textContent = adminSession.tipo === "secretaria" ? "UBS criadas por esta conta" : "Selecionar UBS (gestão global)";
     $("adminSuporteTab").classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
     $("adminChangePasswordButton")?.classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
     $("adminAuditoriaTab").classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
@@ -1752,7 +1754,49 @@ function cancelarFormIndicadorSecretaria(){$("secIndicatorForm")?.classList.add(
 function editarIndicadorSecretaria(id){const i=(window.secretariaIndicators||[]).find(x=>Number(x.id)===Number(id));if(!i)return;abrirFormIndicadorSecretaria();$("secIndicatorId").value=i.id;$("secIndicatorType").value=i.tipo;$("secIndicatorName").value=i.nome;$("secIndicatorUBS").value=i.ubsId;$("secIndicatorGoal").value=i.meta;$("secIndicatorDone").value=i.realizado;$("secIndicatorStart").value=i.periodoInicio||'';$("secIndicatorEnd").value=i.periodoFim||'';$("secIndicatorForm").scrollIntoView({behavior:'smooth',block:'center'});}
 async function salvarIndicadorSecretaria(){const body={id:Number($("secIndicatorId").value)||undefined,ubs_id:$("secIndicatorUBS").value,tipo:$("secIndicatorType").value,nome:$("secIndicatorName").value.trim(),meta:Number($("secIndicatorGoal").value),realizado:Number($("secIndicatorDone").value||0),periodo_inicio:$("secIndicatorStart").value,periodo_fim:$("secIndicatorEnd").value};try{await api('admin_save_health_indicator',{method:'POST',body});cancelarFormIndicadorSecretaria();toast('Meta salva.');await carregarPainelSecretaria();}catch(e){toast(e.message);}}
 async function removerIndicadorSecretaria(id){if(!confirm('Remover este indicador?'))return;try{await api('admin_delete_health_indicator',{method:'POST',body:{id}});toast('Indicador removido.');await carregarPainelSecretaria();}catch(e){toast(e.message);}}
-async function carregarContasSecretaria(){if(adminSession?.tipo!=='desenvolvedor')return;const box=$("listaContasSecretaria");if(!box)return;try{const d=await api('admin_secretaria_accounts');const rows=d.accounts||[];box.innerHTML=rows.length?rows.map(a=>`<article class="employee"><div class="employee-info"><strong>${escapeHTML(a.usuario)}</strong><span>${escapeHTML(a.cidade||'Localização pendente')} / ${escapeHTML(String(a.estado||'').trim())} • Secretaria • criada ${escapeHTML(a.criadoEm||'')}</span></div><button type="button" class="btn danger" onclick="removerContaSecretaria(${Number(a.id)})">Remover acesso</button></article>`).join(''):'<div class="info-box">Nenhuma conta de Secretaria cadastrada.</div>';}catch(e){box.innerHTML=`<div class="info-box">${escapeHTML(e.message)}</div>`;}}
+async function carregarContasSecretaria(){
+    if(adminSession?.tipo!=='desenvolvedor')return;
+    const box=$("listaContasSecretaria");
+    if(!box)return;
+    try{
+        const d=await api('admin_secretaria_accounts');
+        const rows=d.accounts||[];
+        box.innerHTML=rows.length?rows.map(a=>`<article class="employee"><div class="employee-info"><strong>${escapeHTML(a.usuario)}</strong><span>${escapeHTML(a.cidade||'Localização pendente')} / ${escapeHTML(String(a.estado||'').trim())} • Secretaria • criada ${escapeHTML(a.criadoEm||'')}</span></div><button type="button" class="btn danger" onclick="removerContaSecretaria(${Number(a.id)})">Remover acesso</button></article>`).join(''):'<div class="info-box">Nenhuma conta de Secretaria cadastrada.</div>';
+        await carregarVinculosUBS();
+    }catch(e){box.innerHTML=`<div class="info-box">${escapeHTML(e.message)}</div>`;}
+}
+async function carregarVinculosUBS(){
+    const box=$("listaVinculosUBS");
+    if(!box||adminSession?.tipo!=='desenvolvedor')return;
+    try{
+        const data=await api('admin_ubs_ownership');
+        const units=data.ubs||[], accounts=data.accounts||[];
+        if(!units.length){box.innerHTML='<div class="info-box">Nenhuma UBS cadastrada.</div>';return;}
+        box.innerHTML=units.map(unit=>{
+            const city=String(unit.cidade||'').trim(), state=String(unit.estado||'').trim().toUpperCase();
+            const creatorId=unit.criadorSecretariaId==null?'':String(unit.criadorSecretariaId);
+            const eligible=accounts.filter(account=>{const accountCity=String(account.cidade||'').trim(),accountState=String(account.estado||'').trim().toUpperCase();return String(account.id)===creatorId&&city!==''&&accountCity!==''&&/^[A-Z]{2}$/.test(state)&&state===accountState&&accountCity.toLocaleLowerCase('pt-BR')===city.toLocaleLowerCase('pt-BR');});
+            const current=unit.secretariaId==null?'':String(unit.secretariaId);
+            const currentIsEligible=eligible.some(account=>String(account.id)===current);
+            const creator=accounts.find(account=>String(account.id)===creatorId);
+            const options=[`<option value=""${current===''?' selected':''}>Sem vínculo — invisível às Secretarias</option>`,...eligible.map(account=>`<option value="${escapeAttr(account.id)}"${String(account.id)===current?' selected':''}>${escapeHTML(account.usuario)} • ${escapeHTML(account.cidade)} / ${escapeHTML(String(account.estado||'').trim())}</option>` )];
+            if(current&&!currentIsEligible)options.push(`<option value="${escapeAttr(current)}" selected disabled>Vínculo atual não comprovado como criador</option>`);
+            const creatorLabel=creator?`criada por ${escapeHTML(creator.usuario)}`:'autoria Secretaria não comprovada';
+            return `<article class="employee"><div class="employee-info"><strong>${escapeHTML(unit.nome)}</strong><span>${escapeHTML(city)} / ${escapeHTML(state)} • ${escapeHTML(creatorLabel)} • ${current?`vinculada à ${escapeHTML(unit.secretariaUsuario||'conta Secretaria')}`:'sem vínculo de Secretaria'}</span></div><div class="form-grid"><div><label>Conta criadora comprovada</label><select data-ubs-owner="${escapeAttr(unit.id)}">${options.join('')}</select></div><button type="button" class="btn secondary" data-save-ubs-owner="${escapeAttr(unit.id)}">Salvar vínculo</button></div>${eligible.length?'':'<small class="field-help">Sem prova auditável de criação por uma conta Secretaria da mesma cidade/UF. A UBS permanece invisível; não é possível atribuí-la por suposição.</small>'}</article>`;
+        }).join('');
+        box.querySelectorAll('[data-save-ubs-owner]').forEach(button=>button.addEventListener('click',()=>salvarVinculoUBS(button.dataset.saveUbsOwner||'')));
+    }catch(e){box.innerHTML=`<div class="info-box">${escapeHTML(e.message)}</div>`;}
+}
+async function salvarVinculoUBS(ubsId){
+    const box=$("listaVinculosUBS");
+    const select=Array.from(box?.querySelectorAll('[data-ubs-owner]')||[]).find(item=>item.dataset.ubsOwner===String(ubsId));
+    if(!select)return;
+    const owner=select.value;
+    const message=owner?'Vincular esta UBS somente à conta Secretaria que a auditoria identifica como criadora, na mesma cidade/UF?':'Desvincular esta UBS? Ela ficará invisível para todas as contas Secretaria.';
+    if(!confirm(message))return;
+    try{const result=await api('admin_assign_ubs_owner',{method:'POST',body:{ubs_id:ubsId,secretaria_id:owner}});toast(result.message||'Vínculo atualizado.');await carregarVinculosUBS();}
+    catch(e){toast(e.message);}
+}
 async function criarContaSecretaria(){const body={usuario:$("secAdminUsuario").value.trim(),senha:$("secAdminSenha").value,cidade:$("secAdminCidade").value.trim(),estado:$("secAdminEstado").value.trim().toUpperCase()};try{const d=await api('admin_create_secretaria',{method:'POST',body});$("secAdminUsuario").value='';$("secAdminSenha").value='';$("secAdminCidade").value='';$("secAdminEstado").value='';$("secAdminCidadeOptions").innerHTML='';toast(d.message);await carregarContasSecretaria();}catch(e){toast(e.message);}}
 async function removerContaSecretaria(id){if(!confirm('Remover o acesso desta conta da Secretaria?'))return;try{await api('admin_delete_secretaria',{method:'POST',body:{id}});toast('Acesso removido.');await carregarContasSecretaria();}catch(e){toast(e.message);}}
 function atualizarBotaoArquivarUBS(){const b=$("adminArchiveButton"),unit=UBSAdminAtual();if(!b)return;if(!adminSession||!['desenvolvedor','secretaria'].includes(adminSession.tipo)||!unit){b.classList.add('hidden');return;}b.classList.remove('hidden');b.textContent=unit.ativa===false?'Reativar UBS':'Desativar e arquivar UBS';b.classList.toggle('secondary',unit.ativa===false);b.classList.toggle('danger',unit.ativa!==false);}

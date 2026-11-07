@@ -324,19 +324,57 @@ function require_professional(): array
     return $session;
 }
 
-function authorize_ubs(string $ubsId): array
+function secretaria_account_scope(PDO $pdo, array $session): array
+{
+    if (($session['tipo'] ?? '') !== 'secretaria' || (string)($session['id'] ?? '') === '') {
+        json_response(['success' => false, 'message' => 'Escopo da Secretaria inválido.'], 403);
+    }
+
+    $query = $pdo->prepare("SELECT id,cidade,estado FROM administradores WHERE id=? AND tipo='secretaria'");
+    $query->execute([(string)$session['id']]);
+    $account = $query->fetch();
+    $city = trim((string)($account['cidade'] ?? ''));
+    $state = strtoupper(trim((string)($account['estado'] ?? '')));
+    if (!$account || $city === '' || !preg_match('/^[A-Z]{2}$/', $state)) {
+        json_response(['success' => false, 'message' => 'A conta da Secretaria precisa ter cidade e UF válidas.'], 403);
+    }
+
+    return ['id' => (string)$account['id'], 'cidade' => $city, 'estado' => $state];
+}
+
+function secretaria_ubs_scope_filter(array $scope, string $alias = 'u'): array
+{
+    if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $alias)) {
+        throw new InvalidArgumentException('Alias SQL inválido.');
+    }
+
+    return [
+        $alias . '.secretaria_id=? AND LOWER(TRIM(' . $alias . '.cidade))=LOWER(TRIM(?)) AND UPPER(TRIM(' . $alias . '.estado))=UPPER(TRIM(?))',
+        [(string)$scope['id'], (string)$scope['cidade'], (string)$scope['estado']]
+    ];
+}
+
+function authorize_ubs(PDO $pdo, string $ubsId): array
 {
     $session = require_admin();
 
-    if (
-        !in_array($session['tipo'], ['desenvolvedor', 'secretaria'], true) &&
-        $session['ubs_id'] !== $ubsId
-    ) {
-        json_response([
-            'success' => false,
-            'message' => 'Você não tem permissão para acessar esta UBS.'
-        ], 403);
+    if (($session['tipo'] ?? '') === 'desenvolvedor') {
+        return $session;
     }
 
-    return $session;
+    if (($session['tipo'] ?? '') === 'ubs' && (string)($session['ubs_id'] ?? '') === $ubsId) {
+        return $session;
+    }
+
+    if (($session['tipo'] ?? '') === 'secretaria') {
+        $scope = secretaria_account_scope($pdo, $session);
+        [$where, $params] = secretaria_ubs_scope_filter($scope, 'u');
+        $query = $pdo->prepare('SELECT u.id FROM ubs u WHERE u.id=? AND ' . $where . ' LIMIT 1');
+        $query->execute(array_merge([$ubsId], $params));
+        if ($query->fetchColumn()) {
+            return $session;
+        }
+    }
+
+    json_response(['success' => false, 'message' => 'Você não tem permissão para acessar esta UBS.'], 403);
 }
