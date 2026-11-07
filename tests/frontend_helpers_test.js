@@ -19,6 +19,8 @@ assert.equal(context.formatarCpf('123'), '123');
 
 const html = fs.readFileSync('index.php', 'utf8');
 const apiSource = fs.readFileSync('api.php', 'utf8');
+const filaVivaPanel = fs.readFileSync('fila_viva_panel.php', 'utf8');
+const filaVivaSource = fs.readFileSync('fila_viva.php', 'utf8');
 assert.match(html, /id="adminChangePasswordButton"[\s\S]*id="adminCurrentPassword"/, 'O painel deve oferecer troca de senha ao desenvolvedor.');
 assert.match(js, /function alterarSenhaDesenvolvedor\(/, 'O formulário deve validar e enviar a troca de senha.');
 assert.match(apiSource, /case 'admin_change_password'/, 'A API deve expor a ação de troca de senha protegida.');
@@ -32,6 +34,19 @@ assert.match(apiSource, /UPDATE administradores SET cidade=\?,estado=\? WHERE id
 assert.match(apiSource, /\$requiresCsrf = \$_SERVER\['REQUEST_METHOD'\] === 'POST' && \$action !== 'asaas_webhook';/, 'Toda mutação da API, exceto o webhook assinado, deve exigir CSRF.');
 assert.match(js, /const csrfRequired = method === "POST" && action !== "asaas_webhook";/, 'O wrapper deve enviar CSRF também para mutações professional_*.');
 assert.doesNotMatch(apiSource, /!str_starts_with\(\(string\)\$action, 'professional_'\)/, 'Ações professional_* não podem ser dispensadas da proteção CSRF.');
+assert.match(html, /Cartão SUS[\s\S]*id="patientActivationCode"[\s\S]*Entrar com código/, 'O portal do paciente deve exigir o código emitido pela UBS.');
+assert.match(html, /id="adminPatientActivationTab"[\s\S]*id="adminPatientActivation"/, 'A interface deve incluir uma ferramenta de emissão para o painel UBS.');
+assert.match(js, /api\("patient_activate", \{method:"POST", body:\{sus, codigo\}\}\)/, 'A entrada deve trocar SUS e código pela sessão autenticada do paciente.');
+assert.match(js, /adminSession\?\.tipo !== "ubs"/, 'A interface deve limitar emissão à conta UBS.');
+assert.match(js, /api\("get_patient_exams"\)/, 'A consulta de exames não deve enviar SUS como credencial.');
+assert.match(filaVivaPanel, /Criança\/adolescente[\s\S]*Pessoa com deficiência[\s\S]*Outra prioridade legal aprovada/, 'A validação humana deve oferecer as categorias de prioridade legal pedidas.');
+assert.match(js, /function confirmarPrioridadeFilaViva\(/, 'A prioridade selecionada deve passar por submissão explícita da Secretaria.');
+assert.match(filaVivaPanel, /Pacientes com prioridade legal[\s\S]*id="fvMetricLegalPriority"/, 'O painel deve expor o total de pacientes com prioridade legal validada.');
+assert.match(js, /set\('fvMetricLegalPriority', num\(m\.prioridadesValidadas\)\)/, 'O card deve ser preenchido pela métrica da API.');
+assert.match(filaVivaSource, /COUNT\(DISTINCT CASE WHEN l\.prioridade_validada_em IS NOT NULL THEN l\.paciente_id END\)/, 'A métrica deve contar pacientes distintos, não encaminhamentos duplicados.');
+assert.match(filaVivaPanel, /Desempenho operacional por unidade[\s\S]*id="fvUnitPerformance"/, 'O gestor deve visualizar o comparativo operacional por unidade.');
+assert.match(filaVivaSource, /'desempenhoUnidades' => \$unitPerformance/, 'O backend deve fornecer os indicadores agregados por UBS.');
+assert.match(js, /const outcomes = attended \+ absences;[\s\S]*absences \/ outcomes/, 'A taxa de faltas deve usar somente atendimentos e faltas registrados.');
 const definitions = new Set([
   ...Array.from(js.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g), match => match[1]),
   ...Array.from(js.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\(?[^=]*=>)/g), match => match[1]),

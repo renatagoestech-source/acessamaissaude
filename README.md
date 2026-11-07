@@ -16,7 +16,7 @@ Para evitar cobranças, mantenha o limite de gastos do Starter em `US$ 0`. Ao at
 
 O banco ainda precisa do esquema inicial. `database.sql` começa com `DROP DATABASE`; execute-o somente em uma instalação nova e vazia, nunca sobre uma base que já contenha dados. As migrações compatíveis restantes são executadas pela aplicação após a primeira conexão.
 
-Em instalações existentes com Supabase/PostgreSQL, aplique manualmente no SQL Editor as migrações necessárias de `migrations/`; para o filtro de UBS por localização, execute `migrations/20261009_ubs_location.sql` antes de publicar o código. O bootstrap da aplicação não executa DDL no PostgreSQL.
+Em instalações existentes com Supabase/PostgreSQL, aplique manualmente as migrations compatíveis de `migrations/`, em ordem. O bootstrap da aplicação não executa DDL no PostgreSQL. A migration do código de ativação do paciente é `migrations/20261107_patient_activation_codes.sql`.
 
 Como este sistema pode armazenar informações de saúde, use dados fictícios no plano gratuito até avaliar requisitos de privacidade, backups e disponibilidade para o uso pretendido.
 
@@ -72,6 +72,13 @@ A aba de assinatura está em modo demonstração e não cria cobrança real no A
 - UBS antigas só recebem owner automaticamente quando a auditoria comprova um único criador Secretaria e a cidade/UF ainda coincidem. Unidades sem prova ficam invisíveis; o Desenvolvedor só pode recuperar o vínculo para a conta criadora comprovada — nunca transferir para outra Secretaria por conveniência. A ação é auditada.
 - Consulte o [guia de escopo por Secretaria e vínculo seguro das UBS](SECRETARIA_SCOPE_GUIA.md) para a regra de acesso, migrações e tratamento das unidades legadas.
 - As migrações compatíveis de colunas e tabelas rodam pela aplicação ao conectar ao banco existente. `database.sql` serve apenas para instalação nova: começa com `DROP DATABASE`; **não o execute em uma base de produção existente**.
+
+## Acesso do paciente e dados de saúde
+
+- O portal do paciente não aceita mais cadastro/login com Cartão SUS como prova de identidade. A equipe da UBS, após conferir a pessoa presencialmente, registra nome, telefone e SUS no painel da própria unidade e emite um código de 8 dígitos, de uso único, válido por 15 minutos e bloqueado após cinco tentativas. O código nunca é persistido em texto claro: o servidor guarda HMAC usando segredo de servidor/credencial de banco.
+- Consultas, perfil, notificações, exames, anexos, lembretes e cancelamentos agora usam o ID da sessão autenticada; o SUS não funciona como senha nem é enviado nos pedidos privados do navegador. Código só pode ser emitido pela conta UBS daquela unidade; registro já vinculado a outra UBS ou a clínica particular é bloqueado.
+- Sessão usa `SameSite=None; Secure` em HTTPS/Preview embutido e `SameSite=Lax` em desenvolvimento HTTP. A migration aditiva está em `migrations/20261107_patient_activation_codes.sql`; o bootstrap MySQL/TiDB e `database.sql` incluem a estrutura equivalente.
+- Isso é um controle técnico inicial, não uma certificação LGPD. Antes de inserir dados reais, ainda são necessários análise jurídica/institucional das bases legais e papéis, política de retenção e descarte, backup e restauração testados, resposta a incidentes, monitoramento e revisão de segurança da infraestrutura. Até então, usar somente dados fictícios no staging aprovado.
 
 
 ## Links de acesso separados

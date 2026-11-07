@@ -1,6 +1,6 @@
 # Acessa+ Saúde Inteligente — guia da Fila Viva
 
-**Versão de trabalho:** 6 de novembro de 2026
+**Versão de trabalho:** 7 de novembro de 2026
 **Objetivo:** apoiar a avaliação do projeto pela Secretaria Municipal de Saúde de Triunfo–PE, sem afirmar aprovação, implantação oficial ou integração não realizada.
 
 ## Resumo
@@ -13,13 +13,14 @@ A branch `feature/acessa-mais-saude-inteligente` acrescenta ao Acessa+ Saúde um
 |---|---|---|
 | Encaminhamentos e protocolo | Implementado | UBS registra pelo Cartão SUS e escolhe unidade/especialidade/dia; fluxo tradicional da lista de espera também recebe protocolo e data de entrada. |
 | Fila por unidade, especialidade e situação | Implementado | Escopo UBS e Secretaria aplicado no servidor. A fila aparece cronologicamente; categoria de prioridade não altera automaticamente a ordem. |
-| Validação de prioridade | Implementado com responsabilidade humana | Conta da Secretaria registra categoria e observação administrativa. A Prefeitura deve designar formalmente os usuários e definir os critérios antes do piloto. Não inserir diagnóstico nas observações. |
+| Validação de prioridade | Implementado com responsabilidade humana | Formulário inclui criança/adolescente, pessoa com deficiência e outra categoria aprovada; a conta da Secretaria confirma cada caso. A Prefeitura deve aprovar critérios e designar usuários antes do piloto. Não inserir diagnóstico nas observações. |
 | Agenda, confirmação e desfecho | Parcialmente integrado | O painel reutiliza consultas existentes e registra confirmação, reagendamento, cancelamento, realização e falta. O catálogo atual não contém horários por profissional para a UBS. |
 | Reposição de vaga | Implementado com controle manual | Cancelamento em dia útil futuro registra vaga. Operador escolhe manualmente um encaminhamento elegível da mesma unidade/especialidade/data, com prioridade validada. Não há promoção ou decisão automática. |
 | Aceite/recusa | Implementado | Link bearer aleatório de uso único, armazenado no banco somente como hash, com prazo de até 24h ou até o início do dia da vaga. Não se oferta vaga passada, do dia corrente ou em dia sem atendimento. |
 | Registro de presença | Implementado | Falta e atendimento são registrados por usuário autorizado e auditados. A taxa só aparece com denominador de consultas que já têm desfecho. |
-| Painel de indicadores | Implementado | Filtros por período, unidade e especialidade; fila, pendências, espera, agenda, faltas, confirmações, vagas e evolução mensal. Métricas sem amostra adequada ficam indisponíveis. |
+| Painel de indicadores | Implementado, com limites | Filtros por período, unidade e especialidade; fila, pendências, prioridades validadas, espera, agenda, faltas, confirmações, vagas, evolução mensal, ranking de demanda por especialidade e comparativo operacional entre UBS. Métricas sem amostra adequada ficam indisponíveis. Faltas por horário específico não são calculáveis sem grade horária real. |
 | Notificações externas | Não integrado | O sistema cria aviso interno pendente e pode preparar um link `wa.me` para envio manual. Não envia SMS, WhatsApp ou e-mail automaticamente. |
+| Acesso do paciente | Implementado no código, migration de staging aplicada | A UBS verifica a identidade presencialmente e emite código de 8 dígitos, único, válido 15 min, máximo 5 tentativas. Código guardado somente como HMAC. Rotas privadas dependem da sessão; o Cartão SUS não é senha. End-to-end no Preview ainda não foi validado após o novo deploy. |
 | e-SUS APS | Não integrado | Integração depende de levantamento técnico, autorização, padrões e responsabilidades definidos com a Secretaria. |
 
 ### Importante sobre o horário do atendimento
@@ -69,7 +70,7 @@ O escopo sugerido pelo PDF é começar no Ambulatório de Especialidades Médica
 
 ## Privacidade, segurança e governança
 
-O módulo aplica autorização no servidor e exige, para cada conta Secretaria, UBS criada por ela e pertencente à sua cidade/UF. O owner é gravado no servidor; registros legados só são recuperados quando a auditoria comprova um criador único, e nem mesmo o Desenvolvedor pode transferir uma unidade para outra Secretaria. Também há token de resposta armazenado com hash, validação CSRF e auditoria. A equipe deve revisar o controle de acesso do produto como um todo antes de dados reais.
+O módulo aplica autorização no servidor e exige, para cada conta Secretaria, UBS criada por ela e pertencente à sua cidade/UF. O owner é gravado no servidor; registros legados só são recuperados quando a auditoria comprova um criador único, e nem mesmo o Desenvolvedor pode transferir uma unidade para outra Secretaria. Também há token de resposta armazenado com hash, validação CSRF e auditoria. Para pacientes, login e operações privadas agora dependem de código emitido presencialmente e sessão do servidor; o SUS isolado não autentica. A emissão não cruza registro de clínica particular nem registro de outra UBS.
 
 **Ainda não substituído pelo código:** análise formal de LGPD e bases legais, acordo de responsabilidades entre Prefeitura e equipe, inventário e retenção/descarte, backups protegidos e testados, plano de resposta a incidentes, monitoramento/alertas, avaliação de vulnerabilidades e validação de segurança da infraestrutura. Até completar esses itens, usar somente registros fictícios ou ambiente de teste aprovado.
 
@@ -82,11 +83,11 @@ O módulo aplica autorização no servidor e exige, para cada conta Secretaria, 
 ## Migração e validação técnica
 
 - **MySQL/TiDB:** as alterações aditivas estão incluídas no bootstrap `config.php` e serão aplicadas quando uma instância atualizada fizer a conexão. Não foram executadas em produção; antes de publicar, obter backup testado e validar em cópia/homologação.
-- **Supabase/PostgreSQL:** `migrations/20261106_fila_viva.sql`, `migrations/20261107_secretaria_ubs_scope.sql`, `migrations/20261107_secretaria_ubs_creator_guard.sql` e `migrations/20261107_secretaria_ubs_location_guard.sql` foram aplicadas no projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. Histórico, schema e owners existentes foram verificados; owner é mantido somente com autoria auditada única e cidade/UF válidas e compatíveis. Na verificação: 1 UBS vinculada, 5 sem owner, 0 owners sem prova e 0 incompatibilidades; as unidades sem prova ficam invisíveis. Produção não foi alterada.
-- **Vercel Preview:** a validação end-to-end ainda depende de `DATABASE_URL` do staging configurada como segredo somente no ambiente Preview e restrita à branch de avaliação; não reutilizar variáveis TiDB ou URL de produção. Depois do push e redeploy, executar o smoke test.
+- **Supabase/PostgreSQL:** `migrations/20261106_fila_viva.sql`, `migrations/20261107_secretaria_ubs_scope.sql`, `migrations/20261107_secretaria_ubs_creator_guard.sql`, `migrations/20261107_secretaria_ubs_location_guard.sql` e `migrations/20261107_patient_activation_codes.sql` foram aplicadas no projeto Supabase `acessamaissaude`, confirmado pelo usuário como homologação. Histórico, schema e owners existentes foram verificados; owner é mantido somente com autoria auditada única e cidade/UF válidas e compatíveis. Na última verificação agregada de ownership: 1 UBS vinculada, 5 sem owner, 0 owners sem prova e 0 incompatibilidades; as unidades sem prova ficam invisíveis. Produção não foi alterada.
+- **Vercel Preview:** a variável `DATABASE_URL` foi confirmada como segredo apenas no ambiente Preview e restrita à branch `feature/acessa-mais-saude-inteligente` (valor não descriptografado). O deployment READY atual ainda é anterior a esta revisão; após o push, confirmar o novo redeploy e executar smoke test autenticado. Não reutilizar variáveis TiDB nem URL de produção.
 - **Instalação nova:** `database.sql` contém `DROP DATABASE`; nunca executar sobre uma base existente.
 - **Testes locais concluídos:** lint de PHP, `node --check script.js`, `git diff --check`, testes `postgres_compat`, `postgres_session_handler`, `professional_session`, `frontend_helpers` e `secretaria_scope`.
-- **Teste end-to-end pendente:** configurar/confirmar o segredo do Preview para o Supabase de homologação e executar smoke test CRUD/concorrência, permissões por perfil, expiração, aceite/recusa, falta, cancelamento, reagendamento e isolamento entre contas. Não foi confirmado backup/snapshot do staging nesta etapa; obtê-lo antes de novos testes com escrita.
+- **Teste end-to-end pendente:** após o próximo redeploy, executar smoke test CRUD/concorrência, permissões por perfil, login/código presencial, expiração, aceite/recusa, falta, cancelamento, reagendamento e isolamento entre contas. Requer credenciais de avaliação UBS/Secretaria e backup/snapshot verificado do staging antes de testes com escrita.
 
 ## Preparação para envio ao edital
 

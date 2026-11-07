@@ -522,7 +522,10 @@ function fila_viva_dashboard(PDO $pdo): never
     $referralTotalQuery = $pdo->prepare('SELECT COUNT(*) FROM lista_espera l INNER JOIN ubs u ON u.id=l.ubs_id WHERE ' . $where . $citySql);
     $referralTotalQuery->execute(array_merge($params, $cityParams));
     $referralTotal = (int)$referralTotalQuery->fetchColumn();
-    $validationStatsQuery = $pdo->prepare("SELECT SUM(CASE WHEN l.prioridade_validada_em IS NULL THEN 1 ELSE 0 END) AS aguardando,SUM(CASE WHEN l.prioridade_validada_em IS NOT NULL THEN 1 ELSE 0 END) AS validadas FROM lista_espera l INNER JOIN ubs u ON u.id=l.ubs_id WHERE " . $where . $citySql . " AND l.status='pendente'");
+    $demandQuery = $pdo->prepare('SELECT l.especialidade,COUNT(*) AS referrals,COUNT(DISTINCT CASE WHEN l.status=\'pendente\' THEN l.paciente_id END) AS pending_patients,COUNT(DISTINCT CASE WHEN l.status=\'pendente\' AND l.prioridade_validada_em IS NOT NULL THEN l.paciente_id END) AS validated_priority_patients FROM lista_espera l INNER JOIN ubs u ON u.id=l.ubs_id WHERE ' . $where . $citySql . ' GROUP BY l.especialidade ORDER BY pending_patients DESC,referrals DESC,l.especialidade LIMIT 100');
+    $demandQuery->execute(array_merge($params, $cityParams));
+    $demandBySpecialty = $demandQuery->fetchAll();
+    $validationStatsQuery = $pdo->prepare("SELECT COUNT(DISTINCT CASE WHEN l.prioridade_validada_em IS NULL THEN l.paciente_id END) AS aguardando,COUNT(DISTINCT CASE WHEN l.prioridade_validada_em IS NOT NULL THEN l.paciente_id END) AS validadas FROM lista_espera l INNER JOIN ubs u ON u.id=l.ubs_id WHERE " . $where . $citySql . " AND l.status='pendente'");
     $validationStatsQuery->execute(array_merge($params, $cityParams));
     $validationStats = $validationStatsQuery->fetch() ?: [];
     $awaitingValidation = (int)($validationStats['aguardando'] ?? 0);
@@ -547,6 +550,11 @@ function fila_viva_dashboard(PDO $pdo): never
         if ($status === 'agendado' && (string)$row['confirmacao_status'] === 'confirmada') $appointmentStats['confirmadas'] += $count;
         if ($status === 'agendado' && (string)$row['confirmacao_status'] !== 'confirmada') $appointmentStats['aguardandoConfirmacao'] += $count;
     }
+
+    $unitFilterSql = $ubsId !== '' ? ' AND u.id=?' : '';
+    $unitPerformanceQuery = $pdo->prepare('SELECT u.id,u.nome,COUNT(DISTINCT l.id) AS referrals,COUNT(DISTINCT CASE WHEN l.status=\'pendente\' THEN l.paciente_id END) AS pending_patients,COUNT(DISTINCT CASE WHEN c.status=\'atendido\' THEN c.id END) AS attended,COUNT(DISTINCT CASE WHEN c.status=\'faltou\' THEN c.id END) AS absences,COUNT(DISTINCT CASE WHEN c.status=\'cancelado\' THEN c.id END) AS canceled FROM ubs u LEFT JOIN lista_espera l ON l.ubs_id=u.id AND ' . $where . ' LEFT JOIN consultas c ON c.ubs_id=u.id AND ' . $appointmentWhere . ' WHERE u.ativa=1' . $unitFilterSql . $citySql . ' GROUP BY u.id,u.nome ORDER BY pending_patients DESC,referrals DESC,u.nome LIMIT 100');
+    $unitPerformanceQuery->execute(array_merge($params, $appointmentParams, $ubsId !== '' ? [$ubsId] : [], $cityParams));
+    $unitPerformance = $unitPerformanceQuery->fetchAll();
 
     $waitTimesQuery = $pdo->prepare('SELECT l.encaminhado_em,c.data_consulta FROM lista_espera l INNER JOIN consultas c ON c.id=l.consulta_id INNER JOIN ubs u ON u.id=l.ubs_id WHERE ' . $where . $citySql . " AND c.status='atendido'");
     $waitTimesQuery->execute(array_merge($params, $cityParams));
@@ -643,7 +651,7 @@ function fila_viva_dashboard(PDO $pdo): never
         'taxaFaltasRegistradas' => $noShowRate, 'confirmadas' => $appointmentStats['confirmadas'], 'aguardandoConfirmacao' => $appointmentStats['aguardandoConfirmacao'], 'taxaConfirmacao' => $confirmationRate,
         'vagasLiberadas' => $releasedVacancies, 'vagasDisponiveis' => $vacancyStats['disponivel'], 'vagasOfertadas' => $vacancyStats['ofertada'], 'vagasPreenchidas' => $vacancyStats['preenchida'], 'vagasReaproveitadas' => $reused, 'taxaReaproveitamento' => $reuseRate,
         'ocupacaoAgenda' => $occupancy, 'capacidadeConfigurada' => $capacity, 'horariosOcupados' => $used
-    ], 'encaminhamentos' => $allReferrals, 'vagas' => $vacancies, 'consultas' => $appointments, 'evolucaoMensal' => array_values($monthly), 'limiteResultados' => 500]);
+    ], 'encaminhamentos' => $allReferrals, 'vagas' => $vacancies, 'consultas' => $appointments, 'evolucaoMensal' => array_values($monthly), 'demandaPorEspecialidade' => $demandBySpecialty, 'desempenhoUnidades' => $unitPerformance, 'limiteResultados' => 500]);
 }
 
 

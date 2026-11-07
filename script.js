@@ -94,16 +94,23 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     aplicarMascaraTelefone();
 
-    document
-        .getElementById("susPaciente")
-        .addEventListener("input", function () {
-            this.value = this.value.replace(/\D/g, "").slice(0, 15);
-        });
+    document.getElementById("susPaciente")?.addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 20); });
+    document.getElementById("patientActivationCode")?.addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 8); });
+    document.getElementById("patientCodeSus")?.addEventListener("input", function () { this.value = this.value.replace(/\D/g, "").slice(0, 20); });
 
     renderUBS();
     preencherSelectUBSPaciente();
 
-    const pacienteSalvo = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
+    let pacienteSalvo = null;
+    if (databaseReady) {
+        try {
+            const patientAuth = await api("patient_me");
+            pacienteSalvo = patientAuth.patient || null;
+            if (pacienteSalvo) sessionStorage.setItem(STORAGE_PATIENT, JSON.stringify(pacienteSalvo));
+        } catch (_error) {
+            sessionStorage.removeItem(STORAGE_PATIENT);
+        }
+    }
     const clinicSlug = new URLSearchParams(location.search).get("clinica");
     const portal = document.body.dataset.portal || "";
     if (databaseReady && clinicSlug) {
@@ -121,6 +128,8 @@ document.addEventListener("DOMContentLoaded", async function () {
     } else if (pacienteSalvo && databaseReady) {
         definirModoUsuario(true);
         preencherDadosPaciente(pacienteSalvo);
+        await carregarConsultasPaciente();
+        await carregarExamesPaciente();
         atualizarDashboard();
         mostrarApenas("dashboardSection");
     } else if (databaseReady && portal === "ubs") {
@@ -256,13 +265,7 @@ async function carregarDados() {
                 ) || "null"
             );
 
-        if (paciente) {
-
-            await carregarConsultasPaciente(
-                paciente.sus
-            );
-
-        }
+        if (paciente) await carregarConsultasPaciente();
 
     } catch (error) {
         databaseReady = false;
@@ -289,17 +292,11 @@ function tentarRecarregarPortal() {
     window.location.reload();
 }
 
-async function carregarConsultasPaciente(sus) {
+async function carregarConsultasPaciente() {
 
     try {
 
-        const data =
-            await api(
-                "get_patient_appointments",
-                {
-                    params: { sus }
-                }
-            );
+        const data = await api("get_patient_appointments");
 
         appointments =
             data.appointments || [];
@@ -449,89 +446,25 @@ function mostrarApenas(id) {
    ============================================================ */
 
 async function salvarPaciente() {
-
-    const nome =
-        $("nomePaciente").value.trim();
-
-    const telefone =
-        $("telefonePaciente").value.trim();
-
-    const sus =
-        $("susPaciente").value.trim();
-
-    if (!nome) {
-
-        toast("Digite seu nome completo.");
-        $("nomePaciente").focus();
-
-        return;
-
-    }
-
-    if (
-        telefone.replace(/\D/g, "").length < 10
-    ) {
-
-        toast("Digite um celular válido.");
-        $("telefonePaciente").focus();
-
-        return;
-
-    }
-
-    if (sus.length < 8) {
-
-        toast("Digite o número do Cartão SUS.");
-        $("susPaciente").focus();
-
-        return;
-
-    }
-
-    const ubsId = $("ubsPaciente").value;
-    if (!ubsId) {
-        toast("Selecione sua UBS de referência.");
-        $("ubsPaciente").focus();
-        return;
-    }
-
+    const sus = $("susPaciente").value.replace(/\D/g, "");
+    const codigo = $("patientActivationCode").value.replace(/\D/g, "");
+    if (sus.length < 8 || sus.length > 20) { toast("Informe um Cartão SUS válido."); $("susPaciente").focus(); return; }
+    if (codigo.length !== 8) { toast("Informe o código de 8 dígitos emitido pela UBS."); $("patientActivationCode").focus(); return; }
     try {
-
-        const data =
-            await api(
-                "save_patient",
-                {
-                    method: "POST",
-                    body: {
-                        nome,
-                        telefone,
-                        sus,
-                        ubs_id: ubsId
-                    }
-                }
-            );
-
-        sessionStorage.setItem(
-            STORAGE_PATIENT,
-            JSON.stringify(data.patient)
-        );
-        sessionStorage.setItem(STORAGE_LAST_UBS, String(data.patient?.ubsId || ubsId));
-
+        const data = await api("patient_activate", {method:"POST", body:{sus, codigo}});
+        const patient = data.patient;
+        sessionStorage.setItem(STORAGE_PATIENT, JSON.stringify(patient));
+        sessionStorage.setItem(STORAGE_LAST_UBS, String(patient?.ubsId || ""));
+        $("susPaciente").value = "";
+        $("patientActivationCode").value = "";
         definirModoUsuario(true);
-
-        await carregarConsultasPaciente(sus);
-        await carregarExamesPaciente(sus);
-        preencherDadosPaciente(data.patient);
+        await carregarConsultasPaciente();
+        await carregarExamesPaciente();
+        preencherDadosPaciente(patient);
         atualizarDashboard();
         mostrarApenas("dashboardSection");
-        toast("Cadastro realizado. Bem-vindo ao Acessa+ Saúde!");
-
-    } catch (error) {
-
-        toast(error.message);
-
-    }
-
+        toast("Acesso ativado com segurança. Bem-vindo ao Acessa+ Saúde!");
+    } catch (error) { toast(error.message); }
 }
 
 function mostrarPerfilPaciente() {
@@ -563,7 +496,6 @@ async function salvarPerfilPaciente() {
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
     if (!paciente) return;
     const body = {
-        sus: paciente.sus,
         nome: $("perfilNome").value.trim(),
         telefone: $("perfilTelefone").value.trim(),
         data_nascimento: $("perfilNascimento").value,
@@ -954,9 +886,9 @@ function ehFeriado(data) {
    HORÁRIOS
    ============================================================ */
 
-async function renderHorarios(){const box=$("filaDisponibilidade");if(!currentDate){box.innerHTML='<h3>Escolha um dia para ver a fila</h3><p>O limite diário é definido pela UBS.</p>';return;}box.innerHTML='<p>Consultando vagas...</p>';await carregarHorariosOcupados();const ocupadas=occupiedSlots.ocupadas||0;const limite=occupiedSlots.limite||12;if(ocupadas>=limite){box.innerHTML=`<h3>Limite diário atingido</h3><p>A UBS atingiu o limite de ${limite} atendimentos para esta especialidade nesta data.</p><p>Você deseja entrar na <strong>lista de espera</strong>? Se houver cancelamento, sua vez será agendada automaticamente e você receberá uma notificação.</p><div class="actions"><button class="btn primary" onclick="entrarListaEspera()">Sim, quero entrar na lista de espera</button></div>`;return;}const fila=occupiedSlots.proximaFila||ocupadas+1;box.innerHTML=`<h3>${fila}ª posição disponível</h3><p>${ocupadas} de ${limite} vagas preenchidas.</p><button class="btn primary" onclick="agendarConsulta()">Confirmar agendamento — entrar na fila</button>`;}
+async function renderHorarios(){const box=$("filaDisponibilidade");if(!currentDate){box.innerHTML='<h3>Escolha um dia para ver a fila</h3><p>O limite diário é definido pela UBS.</p>';return;}box.innerHTML='<p>Consultando vagas...</p>';await carregarHorariosOcupados();const ocupadas=occupiedSlots.ocupadas||0;const limite=occupiedSlots.limite||12;if(ocupadas>=limite){box.innerHTML=`<h3>Limite diário atingido</h3><p>A UBS atingiu o limite de ${limite} atendimentos para esta especialidade nesta data.</p><p>Você deseja entrar na <strong>lista de espera</strong>? Se houver cancelamento, a UBS poderá avaliar sua elegibilidade e oferecer a vaga para você confirmar. Não há agendamento automático.</p><div class="actions"><button class="btn primary" onclick="entrarListaEspera()">Sim, quero entrar na lista de espera</button></div>`;return;}const fila=occupiedSlots.proximaFila||ocupadas+1;box.innerHTML=`<h3>${fila}ª posição disponível</h3><p>${ocupadas} de ${limite} vagas preenchidas.</p><button class="btn primary" onclick="agendarConsulta()">Confirmar agendamento — entrar na fila</button>`;}
 
-async function entrarListaEspera(){const paciente=JSON.parse(sessionStorage.getItem(STORAGE_PATIENT)||'null');if(!paciente||!currentUBS||!currentSpecialty||!currentDate)return;try{const d=await api('join_waitlist',{method:'POST',body:{sus:paciente.sus,ubs_id:currentUBS.id,especialidade:currentSpecialty,data:currentDate}});toast(d.message);}catch(e){toast(e.message);}}
+async function entrarListaEspera(){const paciente=JSON.parse(sessionStorage.getItem(STORAGE_PATIENT)||'null');if(!paciente||!currentUBS||!currentSpecialty||!currentDate)return;try{const d=await api('join_waitlist',{method:'POST',body:{ubs_id:currentUBS.id,especialidade:currentSpecialty,data:currentDate}});toast(d.message);}catch(e){toast(e.message);}}
 
 async function agendarConsulta() {
 
@@ -1006,7 +938,6 @@ async function agendarConsulta() {
                     method: "POST",
                     body: {
                         ubs_id: currentUBS.id,
-                        sus: paciente.sus,
                         especialidade: currentSpecialty,
                         assunto: currentSubject,
                         data: currentDate
@@ -1125,15 +1056,14 @@ function preencherDadosPaciente(paciente) {
     if (!paciente) return;
     if ($("nomePaciente")) $("nomePaciente").value = paciente.nome || "";
     if ($("telefonePaciente")) $("telefonePaciente").value = paciente.telefone || "";
-    if ($("susPaciente")) $("susPaciente").value = paciente.sus || "";
     if ($("ubsPaciente")) $("ubsPaciente").value = paciente.ubsId || "";
     if ($("nomeTopo")) $("nomeTopo").textContent = "Olá, " + ((paciente.nome || "").split(" ")[0] || "Paciente");
     if ($("nomeDashboard")) $("nomeDashboard").textContent = ((paciente.nome || "").split(" ")[0] || "Paciente");
 }
 
-async function carregarExamesPaciente(sus) {
+async function carregarExamesPaciente() {
     try {
-        const data = await api("get_patient_exams", { params: { sus } });
+        const data = await api("get_patient_exams");
         patientExams = data.exams || [];
     } catch (error) {
         patientExams = [];
@@ -1168,7 +1098,7 @@ function atualizarDashboard() {
 
 function iniciarAgendamento() {
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
-    if (!paciente) { mostrarApenas("cadastro"); toast("Faça seu cadastro para agendar uma consulta."); return; }
+    if (!paciente) { mostrarApenas("cadastro"); toast("Entre com o código de ativação recebido presencialmente na sua UBS para agendar."); return; }
     const preferredId = sessionStorage.getItem(STORAGE_LAST_UBS) || paciente.ubsId;
     const preferred = ubsList.find(ubs => String(ubs.id) === String(preferredId));
     if (preferred) { abrirUBS(preferred.id); return; }
@@ -1185,8 +1115,8 @@ function mostrarUBSMenu() {
 
 function mostrarExames() {
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
-    if (!paciente) { mostrarApenas("cadastro"); toast("Faça seu cadastro para acessar seus resultados."); return; }
-    carregarExamesPaciente(paciente.sus).then(() => renderExamesPaciente());
+    if (!paciente) { mostrarApenas("cadastro"); toast("Entre com o código de ativação recebido presencialmente na sua UBS para acessar seus resultados."); return; }
+    carregarExamesPaciente().then(() => renderExamesPaciente());
     mostrarApenas("examesSection");
 }
 
@@ -1194,7 +1124,7 @@ function renderExamesPaciente() {
     const container = $("listaExames");
     if (!container) return;
     if (!patientExams.length) { container.innerHTML = '<div class="info-box"><h3>Nenhum resultado disponível</h3><p>Quando a UBS disponibilizar um resultado, ele aparecerá aqui.</p></div>'; return; }
-    container.innerHTML = patientExams.map(e => `<article class="exam-card"><div class="exam-head"><div><h3>${escapeHTML(e.nome)}</h3><span class="exam-date">Data: ${formatarDataBR(e.data)} • ${escapeHTML(e.ubsNome)}</span></div><span class="status">Disponível</span></div><div class="exam-result"><strong>Resultado</strong><br>${escapeHTML(e.resultado)}</div>${e.observacoes ? `<div class="subtitle"><strong>Observações:</strong> ${escapeHTML(e.observacoes)}</div>` : ""}${e.anexo ? `<a class="btn secondary exam-attachment" href="api.php?action=download_exam&id=${encodeURIComponent(e.id)}&sus=${encodeURIComponent(JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "{}").sus || "")}" target="_blank" rel="noopener">Abrir anexo: ${escapeHTML(e.anexoNome || "resultado")}</a>` : ""}</article>`).join("");
+    container.innerHTML = patientExams.map(e => `<article class="exam-card"><div class="exam-head"><div><h3>${escapeHTML(e.nome)}</h3><span class="exam-date">Data: ${formatarDataBR(e.data)} • ${escapeHTML(e.ubsNome)}</span></div><span class="status">Disponível</span></div><div class="exam-result"><strong>Resultado</strong><br>${escapeHTML(e.resultado)}</div>${e.observacoes ? `<div class="subtitle"><strong>Observações:</strong> ${escapeHTML(e.observacoes)}</div>` : ""}${e.anexo ? `<a class="btn secondary exam-attachment" href="api.php?action=download_exam&id=${encodeURIComponent(e.id)}" target="_blank" rel="noopener">Abrir anexo: ${escapeHTML(e.anexoNome || "resultado")}</a>` : ""}</article>`).join("");
 }
 
 async function mostrarAvisos() {
@@ -1218,12 +1148,12 @@ async function mostrarAvisos() {
 
 async function verificarNotificacoes() {
     const paciente = JSON.parse(sessionStorage.getItem(STORAGE_PATIENT) || "null");
-    if (!paciente) { toast("Faça seu cadastro para receber notificações."); return; }
+    if (!paciente) { toast("Entre com o código de ativação recebido presencialmente na sua UBS para receber notificações."); return; }
     try {
         if ("Notification" in window && Notification.permission === "default") {
             await Notification.requestPermission();
         }
-        const data = await api("get_patient_notifications", {params:{sus:paciente.sus}});
+        const data = await api("get_patient_notifications");
         const notificacoes = data.notifications || [];
         const pendentes = notificacoes.filter(n => n.status === "pendente");
         const badge = $("notificationCount");
@@ -1253,7 +1183,7 @@ function mostrarAgendamentos() {
     if (!paciente) {
 
         toast(
-            "Faça seu cadastro primeiro."
+            "Entre com o código de ativação recebido presencialmente na sua UBS primeiro."
         );
 
         mostrarApenas(
@@ -1299,8 +1229,8 @@ async function cancelarConsultaPaciente(id) {
     const motivo = prompt("Informe o motivo do cancelamento (opcional):", "");
     if (motivo === null) return;
     try {
-        await api("cancel_appointment", {method:"POST", body:{id, sus:paciente.sus, motivo:motivo.trim()}});
-        await carregarConsultasPaciente(paciente.sus);
+        await api("cancel_appointment", {method:"POST", body:{id, motivo:motivo.trim()}});
+        await carregarConsultasPaciente();
         renderMeusAgendamentos();
         atualizarDashboard();
         toast("Consulta cancelada.");
@@ -1431,7 +1361,6 @@ async function ativarLembrete(id) {
                 method: "POST",
                 body: {
                     id,
-                    sus: paciente?.sus || "",
                     lembrete: true
                 }
             }
@@ -1561,6 +1490,7 @@ async function abrirPainelAdmin(){
     $("adminConfigTab").classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
     $("adminDashboardTab")?.classList.toggle('hidden',adminSession.tipo!=='secretaria');
     $("adminSecretariaAccountsTab")?.classList.toggle('hidden',adminSession.tipo!=='desenvolvedor');
+    $("adminPatientActivationTab")?.classList.toggle('hidden',adminSession.tipo!=='ubs');
     $("adminArchiveButton")?.classList.toggle('hidden',!globalRole);
     $("adminAddEmployeeButton")?.classList.toggle("hidden", !canManageUBSEmployees());
     $("employeesReadOnlyNotice")?.classList.toggle("hidden", canManageUBSEmployees());
@@ -1622,6 +1552,19 @@ async function trocarUBSAdmin(){
     await carregarDadosAdmin($("adminUBSSelect").value);atualizarBotaoArquivarUBS();
     if(adminSession?.tipo!=='secretaria')abrirAbaAdmin('dados');
 }
+async function emitirCodigoPaciente() {
+    if (adminSession?.tipo !== "ubs") { toast("Somente a conta da própria UBS pode emitir este código."); return; }
+    const body = {nome:$("patientCodeName").value.trim(), telefone:$("patientCodePhone").value.trim(), sus:$("patientCodeSus").value.replace(/\D/g, "")};
+    const result = $("patientActivationCodeResult");
+    result.classList.add("hidden");
+    try {
+        const data = await api("admin_issue_patient_code", {method:"POST", body});
+        result.textContent = `Código: ${data.codigo} — válido até ${new Date(data.expira_em.replace(" ", "T")).toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"})}. Entregue-o somente ao paciente presente. Ele não poderá ser exibido novamente.`;
+        result.classList.remove("hidden");
+        $("patientCodeName").value = ""; $("patientCodePhone").value = ""; $("patientCodeSus").value = "";
+    } catch (error) { toast(error.message); }
+}
+
 function abrirAbaAdmin(aba) {
 
     $("adminDados")
@@ -1646,11 +1589,13 @@ function abrirAbaAdmin(aba) {
     $("adminExames")?.classList.add("hidden");
     $("adminSecretariaDashboard")?.classList.add("hidden");
     $("adminSecretariaAccounts")?.classList.add("hidden");
+    $("adminPatientActivation")?.classList.add("hidden");
 
     if (aba === "waitlist" && $("adminWaitlist")) { $("adminWaitlist").classList.remove("hidden"); carregarListaEsperaUBS(); }
     if (aba === "fila-viva" && $("adminFilaViva")) { $("adminFilaViva").classList.remove("hidden"); carregarFilaViva(); }
     if (aba === "secretaria" && adminSession?.tipo === "secretaria") { $("adminSecretariaDashboard").classList.remove("hidden"); carregarPainelSecretaria(); }
     if (aba === "secretaria-accounts" && adminSession?.tipo === "desenvolvedor") { $("adminSecretariaAccounts").classList.remove("hidden"); carregarContasSecretaria(); }
+    if (aba === "patient-codes" && adminSession?.tipo === "ubs") $("adminPatientActivation").classList.remove("hidden");
 
     if (aba === "dados") {
 
@@ -2637,7 +2582,8 @@ function fecharMenuPaciente() {
     $("patientMenu").classList.add("hidden");
 }
 
-function sairPaciente() {
+async function sairPaciente() {
+    try { await api("patient_logout", {method:"POST", body:{}}); } catch (_error) {}
     sessionStorage.removeItem(STORAGE_PATIENT);
     appointments = [];
     patientExams = [];
@@ -2693,7 +2639,7 @@ function atualizarPasso(numero) {
    LEMBRETES
    ============================================================ */
 
-async function verificarNotificacoesPendentes(){const paciente=JSON.parse(sessionStorage.getItem(STORAGE_PATIENT)||'null');if(!paciente)return;try{const d=await api('get_patient_notifications',{params:{sus:paciente.sus}});const pendentes=(d.notifications||[]).filter(n=>n.status==='pendente');const vistos=JSON.parse(sessionStorage.getItem('acessa_notificacoes_vistas')||'[]');for(const n of pendentes){if(vistos.includes(String(n.id)))continue;if('Notification' in window && Notification.permission==='granted'){new Notification('Acessa+ Saúde',{body:n.mensagem});}vistos.push(String(n.id));}sessionStorage.setItem('acessa_notificacoes_vistas',JSON.stringify(vistos.slice(-100)));const badge=$('notificationCount');if(badge){badge.textContent=String(pendentes.length);badge.classList.toggle('hidden',pendentes.length===0);}}catch(_e){}}
+async function verificarNotificacoesPendentes(){const paciente=JSON.parse(sessionStorage.getItem(STORAGE_PATIENT)||'null');if(!paciente)return;try{const d=await api('get_patient_notifications');const pendentes=(d.notifications||[]).filter(n=>n.status==='pendente');const vistos=JSON.parse(sessionStorage.getItem('acessa_notificacoes_vistas')||'[]');for(const n of pendentes){if(vistos.includes(String(n.id)))continue;if('Notification' in window && Notification.permission==='granted'){new Notification('Acessa+ Saúde',{body:n.mensagem});}vistos.push(String(n.id));}sessionStorage.setItem('acessa_notificacoes_vistas',JSON.stringify(vistos.slice(-100)));const badge=$('notificationCount');if(badge){badge.textContent=String(pendentes.length);badge.classList.toggle('hidden',pendentes.length===0);}}catch(_e){}}
 
 function verificarLembretes() {
 
@@ -2711,8 +2657,7 @@ function verificarLembretes() {
 
         if (
             consulta.status === "cancelado" ||
-            !consulta.lembrete ||
-            consulta.sus !== paciente.sus
+            !consulta.lembrete
         ) {
             return;
         }
@@ -3447,6 +3392,8 @@ async function carregarFilaViva() {
         filaVivaPopulateDestinations(targets, $('fvOrigin')?.value || '', $('fvTarget')?.value || '');
         renderMetricasFilaViva(data.metrics || {});
         renderEvolucaoFilaViva(data.evolucaoMensal || []);
+        renderDemandaFilaViva(data.demandaPorEspecialidade || []);
+        renderDesempenhoUnidadesFilaViva(data.desempenhoUnidades || []);
         renderEncaminhamentosFilaViva(data.encaminhamentos || []);
         renderVagasFilaViva(data.vagas || [], data.encaminhamentos || []);
         renderConsultasFilaViva(data.consultas || []);
@@ -3463,6 +3410,7 @@ function renderMetricasFilaViva(m) {
     set('fvMetricReferrals', num(m.encaminhamentos));
     set('fvMetricWaiting', num(m.pendentes));
     set('fvMetricValidation', num(m.aguardandoValidacao));
+    set('fvMetricLegalPriority', num(m.prioridadesValidadas));
     const avg = m.tempoMedioEspera === null ? '—' : `${Number(m.tempoMedioEspera).toLocaleString('pt-BR')} d`;
     const median = m.tempoMedianoEspera === null ? '—' : `${Number(m.tempoMedianoEspera).toLocaleString('pt-BR')} d`;
     set('fvMetricWait', m.amostraEspera ? `${avg} / ${median}` : 'Indisponível');
@@ -3486,6 +3434,29 @@ function renderEvolucaoFilaViva(rows) {
         const rw = referrals ? Math.max(3, Math.round(referrals / max * 100)) : 0;
         const aw = attended ? Math.max(3, Math.round(attended / max * 100)) : 0;
         return `<div class="fv-month-row"><strong>${escapeHTML(row.mes)}</strong><div class="fv-month-bars"><div class="fv-month-track" aria-label="${referrals} encaminhamentos"><i style="width:${rw}%"></i></div><div class="fv-month-track" aria-label="${attended} consultas realizadas"><i class="attended" style="width:${aw}%"></i></div></div><span class="fv-month-legend">${referrals} encaminh. • ${attended} realizadas</span></div>`;
+    }).join('');
+}
+function renderDemandaFilaViva(rows) {
+    const box = $('fvDemandBySpecialty'); if (!box) return;
+    if (!rows.length) { box.innerHTML = filaVivaEmpty('Sem encaminhamentos para comparar especialidades neste período.'); return; }
+    const max = Math.max(1, ...rows.map(row => Number(row.pending_patients || 0)));
+    box.innerHTML = rows.map(row => {
+        const pending = Number(row.pending_patients || 0);
+        const referrals = Number(row.referrals || 0);
+        const priority = Number(row.validated_priority_patients || 0);
+        const width = pending ? Math.max(3, Math.round(pending / max * 100)) : 0;
+        return `<div class="fv-month-row"><strong>${escapeHTML(row.especialidade || 'Sem especialidade')}</strong><div class="fv-month-bars"><div class="fv-month-track" aria-label="${pending} pacientes pendentes"><i style="width:${width}%"></i></div></div><span class="fv-month-legend">${pending} pendentes • ${referrals} encaminh. • ${priority} prioridade validada</span></div>`;
+    }).join('');
+}
+function renderDesempenhoUnidadesFilaViva(rows) {
+    const box = $('fvUnitPerformance'); if (!box) return;
+    if (!rows.length) { box.innerHTML = filaVivaEmpty('Nenhuma unidade com dados disponível neste escopo e período.'); return; }
+    box.innerHTML = rows.map(row => {
+        const attended = Number(row.attended || 0);
+        const absences = Number(row.absences || 0);
+        const outcomes = attended + absences;
+        const noShowRate = outcomes ? `${(absences / outcomes * 100).toLocaleString('pt-BR',{maximumFractionDigits:1})}%` : 'indisponível';
+        return `<div class="fv-month-row"><strong>${escapeHTML(row.nome || 'UBS')}</strong><div class="fv-month-bars"><span class="fv-month-legend">${Number(row.referrals || 0)} encaminh. • ${Number(row.pending_patients || 0)} pendentes</span><span class="fv-month-legend">${attended} realizadas • ${absences} faltas • ${Number(row.canceled || 0)} canceladas</span></div><span class="fv-month-legend">Faltas: ${noShowRate}<br>(${outcomes} desfechos)</span></div>`;
     }).join('');
 }
 function filaVivaDaysWaiting(value) {
@@ -3545,14 +3516,32 @@ async function criarEncaminhamentoFilaViva() {
         await carregarFilaViva();
     } catch (error) { toast(error.message); }
 }
-async function validarPrioridadeFilaViva(id) {
+function validarPrioridadeFilaViva(id) {
     if (adminSession?.tipo !== 'secretaria') { toast('A validação cabe à conta da Secretaria autorizada.'); return; }
-    const category = prompt('Informe a categoria/critério aprovado pela Secretaria (não inclua diagnóstico):', '');
-    if (category === null) return;
-    const note = prompt('Observação administrativa opcional (não inclua dados clínicos):', '');
-    if (note === null) return;
+    $('fvPriorityReferralId').value = String(id);
+    $('fvPriorityCategory').value = '';
+    $('fvPriorityOther').value = '';
+    $('fvPriorityObservation').value = '';
+    $('fvPriorityOtherWrap').classList.add('hidden');
+    $('fvPriorityEditor').classList.remove('hidden');
+    $('fvPriorityEditor').scrollIntoView({behavior:'smooth',block:'center'});
+}
+function alternarOutraPrioridadeFilaViva() {
+    $('fvPriorityOtherWrap').classList.toggle('hidden', $('fvPriorityCategory').value !== 'outra');
+}
+function fecharEditorPrioridadeFilaViva() {
+    $('fvPriorityEditor').classList.add('hidden');
+}
+async function confirmarPrioridadeFilaViva() {
+    if (adminSession?.tipo !== 'secretaria') { toast('A validação cabe à conta da Secretaria autorizada.'); return; }
+    const id = Number($('fvPriorityReferralId').value);
+    const selected = $('fvPriorityCategory').value;
+    const category = selected === 'outra' ? $('fvPriorityOther').value.trim() : selected;
+    const note = $('fvPriorityObservation').value.trim();
+    if (!Number.isInteger(id) || id < 1 || category.length < 2) { toast('Selecione uma categoria válida aprovada pela Secretaria.'); return; }
     try {
-        const data = await api('fila_viva_validate_priority', {method:'POST', body:{id,prioridade_categoria:category.trim(),prioridade_observacao:note.trim()}});
+        const data = await api('fila_viva_validate_priority', {method:'POST', body:{id,prioridade_categoria:category,prioridade_observacao:note}});
+        fecharEditorPrioridadeFilaViva();
         toast(data.message || 'Validação registrada.');
         await carregarFilaViva();
     } catch (error) { toast(error.message); }

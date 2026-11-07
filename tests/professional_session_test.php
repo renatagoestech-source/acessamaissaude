@@ -42,6 +42,27 @@ configure_secure_session(SESSION_ABSOLUTE_TIMEOUT);
 if ((int)session_get_cookie_params()['lifetime'] !== SESSION_ABSOLUTE_TIMEOUT) {
     throw new RuntimeException('A sessão profissional deve usar cookie persistente alinhado ao prazo do servidor.');
 }
+$originalHttps = $_SERVER['HTTPS'] ?? null;
+$originalForwardedProto = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? null;
+$originalVercel = getenv('VERCEL');
+$_SERVER['HTTPS'] = 'on';
+unset($_SERVER['HTTP_X_FORWARDED_PROTO']);
+putenv('VERCEL=');
+configure_secure_session(0);
+$httpsCookie = session_get_cookie_params();
+if (($httpsCookie['samesite'] ?? '') !== 'None' || empty($httpsCookie['secure'])) {
+    throw new RuntimeException('O cookie em Preview HTTPS precisa usar SameSite=None e Secure.');
+}
+$_SERVER['HTTPS'] = 'off';
+configure_secure_session(0);
+$localCookie = session_get_cookie_params();
+if (($localCookie['samesite'] ?? '') !== 'Lax' || !empty($localCookie['secure'])) {
+    throw new RuntimeException('O cookie em HTTP local deve manter SameSite=Lax sem Secure.');
+}
+if ($originalHttps === null) unset($_SERVER['HTTPS']); else $_SERVER['HTTPS'] = $originalHttps;
+if ($originalForwardedProto === null) unset($_SERVER['HTTP_X_FORWARDED_PROTO']); else $_SERVER['HTTP_X_FORWARDED_PROTO'] = $originalForwardedProto;
+if ($originalVercel === false) putenv('VERCEL'); else putenv('VERCEL='.$originalVercel);
+configure_secure_session(SESSION_ABSOLUTE_TIMEOUT);
 
 $apiBootstrap = substr($api, 0, strpos($api, 'switch ($action)') ?: strlen($api));
 $validationPosition = strpos($apiBootstrap, 'validate_professional_session($pdo);');

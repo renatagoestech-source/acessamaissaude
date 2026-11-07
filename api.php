@@ -80,7 +80,23 @@ try {
             break;
 
         case 'save_patient':
-            save_patient($pdo, body_json());
+            json_response(['success'=>false,'message'=>'O cadastro exige código de ativação emitido presencialmente pela UBS.'], 410);
+            break;
+
+        case 'patient_activate':
+            activate_patient_account($pdo, body_json());
+            break;
+
+        case 'patient_me':
+            patient_session_profile($pdo);
+            break;
+
+        case 'patient_logout':
+            patient_logout();
+            break;
+
+        case 'admin_issue_patient_code':
+            issue_patient_activation_code($pdo, body_json());
             break;
 
         case 'update_patient_profile':
@@ -168,14 +184,11 @@ try {
             break;
 
         case 'get_patient_appointments':
-            get_patient_appointments(
-                $pdo,
-                trim((string)($_GET['sus'] ?? ''))
-            );
+            get_patient_appointments($pdo, require_patient_id($pdo));
             break;
 
         case 'get_patient_notifications':
-            get_patient_notifications($pdo, trim((string)($_GET['sus'] ?? '')));
+            get_patient_notifications($pdo, require_patient_id($pdo));
             break;
 
         case 'join_waitlist':
@@ -212,7 +225,7 @@ try {
             break;
 
         case 'get_patient_exams':
-            get_patient_exams($pdo, trim((string)($_GET['sus'] ?? '')));
+            get_patient_exams($pdo, require_patient_id($pdo));
             break;
 
         case 'admin_update_appointment_status':
@@ -520,7 +533,7 @@ function professional_login(PDO $pdo, array $data): never {
     if($p['status']==='pendente') { $pdo->prepare("UPDATE profissionais SET status='ativo' WHERE id=? AND status='pendente'")->execute([$p['id']]); $p['status']='ativo'; }
     if($p['status']!=='ativo') json_response(['success'=>false,'message'=>'Esta conta está suspensa. Entre em contato com o administrador.'],403);
     $p=ensure_professional_public_slug($pdo,$p);
-    auth_clear_attempts($pdo,$key); session_regenerate_id(true); rotate_csrf_token();
+    auth_clear_attempts($pdo,$key); unset($_SESSION['patient'], $_SESSION['admin']); session_regenerate_id(true); rotate_csrf_token();
     $_SESSION['_auth_created_at']=time(); $_SESSION['_last_activity']=time();
     $_SESSION['professional']=['id'=>(int)$p['id'],'email'=>$p['email'],'nome'=>$p['nome'],'slug'=>$p['slug']??'','auth_version'=>(int)$p['auth_version']];
     audit_professional_event($pdo,(int)$p['id'],'login_profissional','profissionais',(string)$p['id']);
@@ -773,21 +786,166 @@ function professional_cancel_subscription(PDO $pdo): never { $s=require_professi
 function get_app_config(PDO $pdo): never { $row=$pdo->query('SELECT id,modo,nome_exibicao AS nomeExibicao,especialidade,registro_profissional AS registroProfissional,telefone,whatsapp,endereco,modalidade,valor_consulta AS valorConsulta,apresentacao,logo_arquivo AS logoArquivo,cor_primaria AS corPrimaria,cor_secundaria AS corSecundaria FROM configuracao_app WHERE id=1')->fetch(); json_response(['success'=>true,'config'=>$row ?: ['modo'=>'ubs','nomeExibicao'=>'Acessa+ Saúde']]); }
 function update_app_config(PDO $pdo, array $data): never { $session=require_admin();if($session['tipo']!=='desenvolvedor')json_response(['success'=>false,'message'=>'Somente o desenvolvedor pode alterar o modo do sistema.'],403);$modo=required_string($data,'modo');if(!in_array($modo,['ubs','profissional'],true))json_response(['success'=>false,'message'=>'Modo inválido.'],422);$nome=required_string($data,'nome_exibicao');$campos=['especialidade','registro_profissional','telefone','whatsapp','endereco','modalidade','apresentacao','logo_arquivo','cor_primaria','cor_secundaria'];$vals=[];foreach($campos as $campo)$vals[]=trim((string)($data[$campo]??''))?:null;$valor=$data['valor_consulta']??null;$q=$pdo->prepare('UPDATE configuracao_app SET modo=?,nome_exibicao=?,especialidade=?,registro_profissional=?,telefone=?,whatsapp=?,endereco=?,modalidade=?,valor_consulta=?,apresentacao=?,logo_arquivo=?,cor_primaria=COALESCE(?,cor_primaria),cor_secundaria=COALESCE(?,cor_secundaria) WHERE id=1');$q->execute([$modo,$nome,$vals[0],$vals[1],$vals[2],$vals[3],$vals[4],$vals[5],$valor!==''?$valor:null,$vals[6],$vals[7],$vals[8],$vals[9]]);audit_event($pdo,'configuracao_modo_atualizada','configuracao_app','1',['modo'=>$modo]);get_app_config($pdo);}
 
+function require_patient_id(PDO $pdo): int
+{
+    $patientId = (int)($_SESSION['patient']['id'] ?? 0);
+    if ($patientId < 1) json_response(['success'=>false,'message'=>'Entre com o código de ativação emitido pela sua UBS.','code'=>'PATIENT_AUTH_REQUIRED'], 401);
+    $stmt = $pdo->prepare('SELECT id FROM pacientes WHERE id = ?');
+    $stmt->execute([$patientId]);
+    if (!$stmt->fetchColumn()) {
+        unset($_SESSION['patient']);
+        json_response(['success'=>false,'message'=>'A sessão do paciente não é mais válida.','code'=>'PATIENT_AUTH_REQUIRED'], 401);
+    }
+    return $patientId;
+}
+
+function patient_profile_by_id(PDO $pdo, int $patientId): array
+{
+    $stmt = $pdo->prepare('SELECT id,codigo,nome,telefone,ubs_id AS ubsId,endereco,data_nascimento AS dataNascimento,condicoes_saude AS condicoesSaude,alergias,medicamentos,informacoes_adicionais AS informacoesAdicionais FROM pacientes WHERE id = ?');
+    $stmt->execute([$patientId]);
+    $patient = $stmt->fetch();
+    if (!$patient) json_response(['success'=>false,'message'=>'Paciente não encontrado.'], 404);
+    return $patient;
+}
+
+function patient_session_profile(PDO $pdo): never
+{
+    $patientId = require_patient_id($pdo);
+    json_response(['success'=>true,'patient'=>patient_profile_by_id($pdo, $patientId)]);
+}
+
+function patient_logout(): never
+{
+    unset($_SESSION['patient']);
+    $_SESSION['_auth_created_at'] = time();
+    $_SESSION['_last_activity'] = time();
+    session_regenerate_id(true);
+    rotate_csrf_token();
+    json_response(['success'=>true,'csrf_token'=>$_SESSION['_csrf_token']]);
+}
+
+function patient_activation_digest(string $code): string
+{
+    $pepper = trim((string)(getenv('PATIENT_ACTIVATION_PEPPER') ?: getenv('DATABASE_URL') ?: getenv('ACESSA_DB_PASS') ?: getenv('TIDB_PASSWORD') ?: ''));
+    if ($pepper === '') json_response(['success'=>false,'message'=>'O servidor ainda não configurou o segredo para códigos de ativação.'], 503);
+    return hash_hmac('sha256', $code, $pepper);
+}
+
+function issue_patient_activation_code(PDO $pdo, array $data): never
+{
+    $admin = require_admin();
+    if (($admin['tipo'] ?? '') !== 'ubs' || empty($admin['ubs_id'])) {
+        json_response(['success'=>false,'message'=>'Somente o acesso próprio da UBS pode emitir código presencial para pacientes.'], 403);
+    }
+    $ubsId = (string)$admin['ubs_id'];
+    $sus = preg_replace('/\D+/', '', (string)($data['sus'] ?? ''));
+    $name = trim((string)($data['nome'] ?? ''));
+    $phone = trim((string)($data['telefone'] ?? ''));
+    if (strlen($sus) < 8 || strlen($sus) > 20 || strlen($name) < 3 || strlen($name) > 150 || !preg_match('/^[0-9()+\s-]{8,30}$/', $phone)) {
+        json_response(['success'=>false,'message'=>'Informe nome, telefone e Cartão SUS válidos após conferir a identidade presencialmente.'], 422);
+    }
+    $code = str_pad((string)random_int(0, 99999999), 8, '0', STR_PAD_LEFT);
+    $codeDigest = patient_activation_digest($code);
+    $expires = date('Y-m-d H:i:s', time() + 900);
+
+    $pdo->beginTransaction();
+    try {
+        $unit = $pdo->prepare('SELECT id FROM ubs WHERE id = ? AND ativa = 1 FOR UPDATE');
+        $unit->execute([$ubsId]);
+        if (!$unit->fetchColumn()) { $pdo->rollBack(); json_response(['success'=>false,'message'=>'A UBS desta conta não está disponível.'], 403); }
+
+        $patientQuery = $pdo->prepare('SELECT id,ubs_id FROM pacientes WHERE sus = ? FOR UPDATE');
+        $patientQuery->execute([$sus]);
+        $patient = $patientQuery->fetch();
+        if ($patient && !empty($patient['ubs_id']) && (string)$patient['ubs_id'] !== $ubsId) {
+            $pdo->rollBack();
+            json_response(['success'=>false,'message'=>'Este paciente está vinculado a outra UBS. A Secretaria deve resolver o vínculo antes da emissão.'], 409);
+        }
+        if ($patient) {
+            $privateLink = $pdo->prepare('SELECT 1 FROM profissional_pacientes WHERE paciente_id = ? LIMIT 1');
+            $privateLink->execute([(int)$patient['id']]);
+            if ($privateLink->fetchColumn()) {
+                $pdo->rollBack();
+                json_response(['success'=>false,'message'=>'Este registro está vinculado a uma clínica particular. A emissão pela UBS foi bloqueada para evitar a mistura de prontuários.'], 409);
+            }
+        }
+        if ($patient) {
+            $patientId = (int)$patient['id'];
+            $update = $pdo->prepare('UPDATE pacientes SET nome = ?, telefone = ?, ubs_id = ? WHERE id = ?');
+            $update->execute([$name, $phone, $ubsId, $patientId]);
+        } else {
+            $patientCode = 'PAC-'.date('ym').'-'.strtoupper(substr(hash('sha256', $sus), 0, 6));
+            $insert = $pdo->prepare('INSERT INTO pacientes (codigo,nome,telefone,sus,ubs_id) VALUES (?,?,?,?,?)');
+            $insert->execute([$patientCode, $name, $phone, $sus, $ubsId]);
+            $patientId = (int)$pdo->lastInsertId();
+        }
+
+        $pdo->prepare('UPDATE patient_activation_codes SET used_at = CURRENT_TIMESTAMP WHERE paciente_id = ? AND used_at IS NULL')->execute([$patientId]);
+        $insertCode = $pdo->prepare('INSERT INTO patient_activation_codes (paciente_id,ubs_id,codigo_hash,expires_at,issued_by) VALUES (?,?,?,?,?)');
+        $insertCode->execute([$patientId, $ubsId, $codeDigest, $expires, (int)$admin['id']]);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
+    }
+
+    audit_event($pdo, 'codigo_ativacao_paciente_emitido', 'pacientes', (string)$patientId, ['ubs_id'=>$ubsId,'validade_minutos'=>15]);
+    json_response(['success'=>true,'codigo'=>$code,'expira_em'=>$expires,'message'=>'Código gerado. Entregue-o presencialmente ao paciente; ele só será exibido nesta resposta.']);
+}
+
+function activate_patient_account(PDO $pdo, array $data): never
+{
+    $sus = preg_replace('/\D+/', '', (string)($data['sus'] ?? ''));
+    $code = trim((string)($data['codigo'] ?? ''));
+    if (strlen($sus) < 8 || strlen($sus) > 20 || !preg_match('/^\d{8}$/', $code)) {
+        json_response(['success'=>false,'message'=>'Cartão SUS ou código inválido. Solicite um novo código na sua UBS.'], 401);
+    }
+    $codeDigest = patient_activation_digest($code);
+
+    $pdo->beginTransaction();
+    try {
+        $patientQuery = $pdo->prepare('SELECT id,ubs_id FROM pacientes WHERE sus = ? LIMIT 1 FOR UPDATE');
+        $patientQuery->execute([$sus]);
+        $patient = $patientQuery->fetch();
+        $patientId = (int)($patient['id'] ?? 0);
+        if ($patientId < 1) { $pdo->rollBack(); json_response(['success'=>false,'message'=>'Cartão SUS ou código inválido. Solicite um novo código na sua UBS.'], 401); }
+
+        $codeQuery = $pdo->prepare('SELECT id,codigo_hash,attempts FROM patient_activation_codes WHERE paciente_id = ? AND ubs_id = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP AND attempts < 5 ORDER BY id DESC LIMIT 1 FOR UPDATE');
+        $codeQuery->execute([$patientId, (string)($patient['ubs_id'] ?? '')]);
+        $activation = $codeQuery->fetch();
+        if (!$activation) { $pdo->rollBack(); json_response(['success'=>false,'message'=>'Cartão SUS ou código inválido/expirado. Solicite um novo código na sua UBS.'], 401); }
+
+        if (!hash_equals((string)$activation['codigo_hash'], $codeDigest)) {
+            $pdo->prepare('UPDATE patient_activation_codes SET attempts = attempts + 1 WHERE id = ?')->execute([(int)$activation['id']]);
+            $pdo->commit();
+            json_response(['success'=>false,'message'=>'Cartão SUS ou código inválido. Solicite um novo código na sua UBS.'], 401);
+        }
+
+        $pdo->prepare('UPDATE patient_activation_codes SET used_at = CURRENT_TIMESTAMP WHERE paciente_id = ? AND used_at IS NULL')->execute([$patientId]);
+        $pdo->commit();
+    } catch (Throwable $error) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $error;
+    }
+
+    unset($_SESSION['admin'], $_SESSION['professional']);
+    session_regenerate_id(true);
+    rotate_csrf_token();
+    $_SESSION['_auth_created_at'] = time();
+    $_SESSION['_last_activity'] = time();
+    $_SESSION['patient'] = ['id'=>$patientId];
+    audit_event($pdo, 'sessao_paciente_ativada', 'pacientes', (string)$patientId, []);
+    json_response(['success'=>true,'csrf_token'=>$_SESSION['_csrf_token'],'patient'=>patient_profile_by_id($pdo, $patientId)]);
+}
+
 function save_patient(PDO $pdo, array $data): never
 {
-    $nome=required_string($data,'nome'); $telefone=required_string($data,'telefone'); $sus=required_string($data,'sus'); $ubsId=required_string($data,'ubs_id');
-    if (strlen($nome) < 3 || strlen($nome) > 150) json_response(['success'=>false,'message'=>'Informe um nome completo válido.'],422);
-    if (!preg_match('/^[0-9()+\s-]{8,30}$/', $telefone)) json_response(['success'=>false,'message'=>'Informe um celular válido.'],422);
-    if (strlen($sus) > 20) json_response(['success'=>false,'message'=>'Cartão SUS inválido.'],422);
-    if (strlen(preg_replace('/\D+/','',$sus))<8) json_response(['success'=>false,'message'=>'Cartão SUS inválido.'],422);
-    $q=$pdo->prepare('SELECT id FROM ubs WHERE id=?'); $q->execute([$ubsId]); if(!$q->fetch()) json_response(['success'=>false,'message'=>'UBS de referência não encontrada.'],422);
-    $codigo='PAC-'.date('ym').'-'.strtoupper(substr(hash('sha256',$sus),0,6)); $q=$pdo->prepare('INSERT INTO pacientes (codigo,nome,telefone,sus,ubs_id) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE nome=VALUES(nome),telefone=VALUES(telefone),ubs_id=COALESCE(VALUES(ubs_id),ubs_id)'); $q->execute([$codigo,$nome,$telefone,$sus,$ubsId?:null]);
-    $q=$pdo->prepare('SELECT id,codigo,nome,telefone,sus,ubs_id AS ubsId,endereco,data_nascimento AS dataNascimento,condicoes_saude AS condicoesSaude,alergias,medicamentos,informacoes_adicionais AS informacoesAdicionais FROM pacientes WHERE sus=?'); $q->execute([$sus]); json_response(['success'=>true,'patient'=>$q->fetch()]);
+    json_response(['success'=>false,'message'=>'O cadastro exige código de ativação emitido presencialmente pela UBS.'], 410);
 }
 
 function update_patient_profile(PDO $pdo, array $data): never
 {
-    $sus = required_string($data, 'sus');
+    $patientId = require_patient_id($pdo);
     $nome = required_string($data, 'nome');
     $telefone = required_string($data, 'telefone');
     $dataNascimento = trim((string)($data['data_nascimento'] ?? ''));
@@ -810,19 +968,17 @@ function update_patient_profile(PDO $pdo, array $data): never
         'UPDATE pacientes
          SET nome = ?, telefone = ?, endereco = ?, data_nascimento = ?,
              condicoes_saude = ?, alergias = ?, medicamentos = ?, informacoes_adicionais = ?
-         WHERE sus = ?'
+         WHERE id = ?'
     );
-    $stmt->execute([$nome, $telefone, $endereco ?: null, $dataNascimento ?: null, $condicoes ?: null, $alergias ?: null, $medicamentos ?: null, $informacoes ?: null, $sus]);
+    $stmt->execute([$nome, $telefone, $endereco ?: null, $dataNascimento ?: null, $condicoes ?: null, $alergias ?: null, $medicamentos ?: null, $informacoes ?: null, $patientId]);
     if ($stmt->rowCount() === 0) {
-        $check = $pdo->prepare('SELECT id FROM pacientes WHERE sus = ?');
-        $check->execute([$sus]);
+        $check = $pdo->prepare('SELECT id FROM pacientes WHERE id = ?');
+        $check->execute([$patientId]);
         if (!$check->fetch()) {
             json_response(['success' => false, 'message' => 'Paciente não encontrado.'], 404);
         }
     }
-    $q=$pdo->prepare('SELECT id,nome,telefone,sus,ubs_id AS ubsId,endereco,data_nascimento AS dataNascimento,condicoes_saude AS condicoesSaude,alergias,medicamentos,informacoes_adicionais AS informacoesAdicionais FROM pacientes WHERE sus=?');
-    $q->execute([$sus]);
-    json_response(['success' => true, 'patient' => $q->fetch()]);
+    json_response(['success' => true, 'patient' => patient_profile_by_id($pdo, $patientId)]);
 }
 
 function patient_id_by_sus(PDO $pdo, string $sus): ?int
@@ -838,15 +994,8 @@ function patient_id_by_sus(PDO $pdo, string $sus): ?int
     return $id === false ? null : (int)$id;
 }
 
-function get_patient_appointments(PDO $pdo, string $sus): never
+function get_patient_appointments(PDO $pdo, int $patientId): never
 {
-    if ($sus === '') {
-        json_response([
-            'success' => false,
-            'message' => 'Cartão SUS não informado.'
-        ], 422);
-    }
-
     $stmt = $pdo->prepare(
         'SELECT
             c.id,
@@ -854,7 +1003,6 @@ function get_patient_appointments(PDO $pdo, string $sus): never
             u.nome AS ubsNome,
             p.nome,
             p.telefone,
-            p.sus,
             c.especialidade,
             c.assunto,
             DATE_FORMAT(c.data_consulta, "%Y-%m-%d") AS data,
@@ -868,11 +1016,11 @@ function get_patient_appointments(PDO $pdo, string $sus): never
          FROM consultas c
          INNER JOIN pacientes p ON p.id = c.paciente_id
          INNER JOIN ubs u ON u.id = c.ubs_id
-         WHERE p.sus = ?
+         WHERE c.paciente_id = ?
          ORDER BY c.data_consulta, c.horario'
     );
 
-    $stmt->execute([$sus]);
+    $stmt->execute([$patientId]);
 
     $rows = $stmt->fetchAll();
 
@@ -889,9 +1037,9 @@ function get_patient_appointments(PDO $pdo, string $sus): never
 
 function join_waitlist(PDO $pdo, array $data): never
 {
-    $ubsId=required_string($data,'ubs_id'); $sus=required_string($data,'sus'); $especialidade=required_string($data,'especialidade'); $date=required_string($data,'data');
+    $ubsId=required_string($data,'ubs_id'); $especialidade=required_string($data,'especialidade'); $date=required_string($data,'data');
     if (!valid_date($date)) json_response(['success'=>false,'message'=>'Data inválida.'],422);
-    $patientId=patient_id_by_sus($pdo,$sus); if($patientId===null) json_response(['success'=>false,'message'=>'Paciente não cadastrado.'],422);
+    $patientId=require_patient_id($pdo);
     $q=$pdo->prepare('SELECT id FROM ubs WHERE id=?');$q->execute([$ubsId]);if(!$q->fetch())json_response(['success'=>false,'message'=>'UBS não encontrada.'],404);
     $protocol='FV-'.date('ymd').'-'.strtoupper(bin2hex(random_bytes(9)));$q=$pdo->prepare("INSERT IGNORE INTO lista_espera (paciente_id,ubs_id,especialidade,data_consulta,status,encaminhado_em,origem_ubs_id,protocolo) VALUES (?,?,?,?,'pendente',CURRENT_TIMESTAMP,?,?)");$q->execute([$patientId,$ubsId,$especialidade,$date,$ubsId,$protocol]);
     json_response(['success'=>true,'message'=>'Você entrou na lista de espera desta data.']);
@@ -911,9 +1059,9 @@ function get_occupied_slots(PDO $pdo,string $ubsId,string $especialidade,string 
 
 function book_appointment(PDO $pdo,array $data): never
 {
- $ubsId=required_string($data,'ubs_id'); $sus=required_string($data,'sus'); $especialidade=required_string($data,'especialidade'); $date=required_string($data,'data'); $assunto=trim((string)($data['assunto'] ?? ''));
+ $ubsId=required_string($data,'ubs_id'); $especialidade=required_string($data,'especialidade'); $date=required_string($data,'data'); $assunto=trim((string)($data['assunto'] ?? ''));
  if(!valid_date($date)) json_response(['success'=>false,'message'=>'Data inválida.'],422); if(!is_business_day($date)) json_response(['success'=>false,'message'=>'A UBS não realiza agendamentos aos finais de semana ou nos feriados fixos.'],422); if(new DateTime($date)<new DateTime('today')) json_response(['success'=>false,'message'=>'Não é possível agendar uma data que já passou.'],422);
- $ubs=get_ubs($pdo,$ubsId,false); $limQ=$pdo->prepare('SELECT limite_diario FROM ubs WHERE id=?');$limQ->execute([$ubsId]);$limite=max(1,(int)$limQ->fetchColumn()); $patientId=patient_id_by_sus($pdo,$sus); if($patientId===null) json_response(['success'=>false,'message'=>'Paciente não cadastrado.'],422); if(!in_array($especialidade,$ubs['especialidades'],true)) json_response(['success'=>false,'message'=>'A especialidade selecionada não está disponível nesta UBS.'],422);
+ $patientId=require_patient_id($pdo); $ubs=get_ubs($pdo,$ubsId,false); $limQ=$pdo->prepare('SELECT limite_diario FROM ubs WHERE id=?');$limQ->execute([$ubsId]);$limite=max(1,(int)$limQ->fetchColumn()); if(!in_array($especialidade,$ubs['especialidades'],true)) json_response(['success'=>false,'message'=>'A especialidade selecionada não está disponível nesta UBS.'],422);
  $pdo->beginTransaction(); try { $lock=$pdo->prepare('SELECT id FROM ubs WHERE id=? FOR UPDATE'); $lock->execute([$ubsId]); $q=$pdo->prepare('SELECT COUNT(*) FROM consultas WHERE ubs_id=? AND especialidade=? AND data_consulta=? AND status="agendado"'); $q->execute([$ubsId,$especialidade,$date]); $ocupadas=(int)$q->fetchColumn(); if($ocupadas>=$limite){$pdo->rollBack();json_response(['success'=>false,'listaEspera'=>true,'message'=>"O limite diário de {$limite} atendimentos desta especialidade já foi atingido. Deseja entrar na lista de espera?",'ubs_id'=>$ubsId,'especialidade'=>$especialidade,'data'=>$date],409);} $q=$pdo->prepare('SELECT id FROM consultas WHERE paciente_id=? AND ubs_id=? AND especialidade=? AND data_consulta=? AND status="agendado" FOR UPDATE'); $q->execute([$patientId,$ubsId,$especialidade,$date]); if($q->fetch()){$pdo->rollBack();json_response(['success'=>false,'message'=>'Você já possui uma consulta para esta especialidade nesta data.'],409);} $id='CONS-'.date('YmdHis').'-'.strtoupper(bin2hex(random_bytes(9))); $fila=$ocupadas+1; $q=$pdo->prepare('INSERT INTO consultas (id,ubs_id,paciente_id,especialidade,assunto,data_consulta,horario,fila,status) VALUES (?,?,?,?,?,?,"00:00:00",?,"agendado")'); $q->execute([$id,$ubsId,$patientId,$especialidade,$assunto ?: null,$date,$fila]); enqueue_reminder($pdo,$patientId,$id,$date); $pdo->commit(); json_response(['success'=>true,'appointment'=>appointment_by_id($pdo,$id)]); } catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
@@ -969,14 +1117,14 @@ function cancel_appointment(PDO $pdo, array $data): never
 
     $pdo->beginTransaction();
     try {
-        $stmt = $pdo->prepare('SELECT c.id,c.ubs_id,p.sus,c.status,c.especialidade,c.data_consulta FROM consultas c INNER JOIN pacientes p ON p.id=c.paciente_id WHERE c.id=? FOR UPDATE');
+        $stmt = $pdo->prepare('SELECT c.id,c.ubs_id,c.paciente_id,c.status,c.especialidade,c.data_consulta FROM consultas c WHERE c.id=? FOR UPDATE');
         $stmt->execute([$id]);
         $appointment = $stmt->fetch();
         if (!$appointment) { $pdo->rollBack(); json_response(['success'=>false,'message'=>'Consulta não encontrada.'],404); }
 
         if (!$session) {
-            $sus = trim((string)($data['sus'] ?? ''));
-            if ($sus === '' || !hash_equals((string)$appointment['sus'], $sus)) {
+            $patientId = require_patient_id($pdo);
+            if ($patientId !== (int)$appointment['paciente_id']) {
                 $pdo->rollBack();
                 json_response(['success'=>false,'message'=>'Você não tem permissão para cancelar esta consulta.'],403);
             }
@@ -1008,7 +1156,7 @@ function cancel_appointment(PDO $pdo, array $data): never
 function set_reminder(PDO $pdo, array $data): never
 {
     $id = required_string($data, 'id');
-    $sus = required_string($data, 'sus');
+    $patientId = require_patient_id($pdo);
 
     $stmt = $pdo->prepare(
         'UPDATE consultas
@@ -1016,12 +1164,12 @@ function set_reminder(PDO $pdo, array $data): never
              notificado = FALSE
          WHERE id = ?
            AND status = "agendado"
-           AND EXISTS (SELECT 1 FROM pacientes p WHERE p.id = consultas.paciente_id AND p.sus = ?)'
+           AND paciente_id = ?'
     );
 
     $stmt->execute([
         $id,
-        $sus
+        $patientId
     ]);
 
     if ($stmt->rowCount() === 0) {
@@ -1037,12 +1185,8 @@ function set_reminder(PDO $pdo, array $data): never
 }
 
 
-function get_patient_exams(PDO $pdo, string $sus): never
+function get_patient_exams(PDO $pdo, int $patientId): never
 {
-    if ($sus === '') {
-        json_response(['success' => false, 'message' => 'Cartão SUS não informado.'], 422);
-    }
-
     $stmt = $pdo->prepare(
         'SELECT e.id, e.nome_exame AS nome, DATE_FORMAT(e.data_exame, "%Y-%m-%d") AS data,
                 e.resultado, e.observacoes, e.anexo_nome AS anexoNome,
@@ -1050,10 +1194,10 @@ function get_patient_exams(PDO $pdo, string $sus): never
          FROM exames_resultados e
          INNER JOIN pacientes p ON p.id = e.paciente_id
          INNER JOIN ubs u ON u.id = e.ubs_id
-         WHERE p.sus = ?
+         WHERE p.id = ?
          ORDER BY e.data_exame DESC, e.id DESC'
     );
-    $stmt->execute([$sus]);
+    $stmt->execute([$patientId]);
 
     json_response(['success' => true, 'exams' => $stmt->fetchAll()]);
 }
@@ -1186,7 +1330,7 @@ function download_exam(PDO $pdo): never
 {
     $id = required_string($_GET, 'id');
     $stmt = $pdo->prepare(
-        'SELECT e.anexo_nome, e.anexo_mime, e.anexo_arquivo, e.ubs_id, p.sus
+        'SELECT e.anexo_nome, e.anexo_mime, e.anexo_arquivo, e.ubs_id, e.paciente_id
          FROM exames_resultados e
          INNER JOIN pacientes p ON p.id = e.paciente_id
          WHERE e.id = ?'
@@ -1199,8 +1343,8 @@ function download_exam(PDO $pdo): never
 
     $session = admin_session();
     if (!$session) {
-        $sus = trim((string)($_GET['sus'] ?? ''));
-        if ($sus === '' || !hash_equals((string)$exam['sus'], $sus)) {
+        $patientId = require_patient_id($pdo);
+        if ($patientId !== (int)$exam['paciente_id']) {
             json_response(['success' => false, 'message' => 'Você não tem permissão para abrir este anexo.'], 403);
         }
     } else {
@@ -1224,7 +1368,7 @@ function enqueue_reminder(PDO $pdo,int $patientId,string $appointmentId,string $
 function support_message(PDO $pdo,array $data): never {
     $nome=required_string($data,'nome');$telefone=required_string($data,'telefone');$mensagem=required_string($data,'mensagem');
     if(strlen($mensagem)>3000)json_response(['success'=>false,'message'=>'A mensagem deve ter no máximo 3000 caracteres.'],422);
-    $patientId=!empty($data['sus'])?patient_id_by_sus($pdo,trim((string)$data['sus'])):null;
+    $patientId = !empty($_SESSION['patient']['id']) ? require_patient_id($pdo) : null;
     $destinoTipo='desenvolvedor'; $destinoId=null;
     if($patientId){
         $q=$pdo->prepare('SELECT ubs_id FROM pacientes WHERE id=?'); $q->execute([$patientId]); $ubsId=$q->fetchColumn();
@@ -1563,12 +1707,10 @@ function admin_audit(PDO $pdo): never
     json_response(['success'=>true,'events'=>$stmt->fetchAll()]);
 }
 
-function get_patient_notifications(PDO $pdo, string $sus): never
+function get_patient_notifications(PDO $pdo, int $patientId): never
 {
-    $id = patient_id_by_sus($pdo, $sus);
-    if ($id === null) json_response(['success'=>true,'notifications'=>[]]);
     $stmt = $pdo->prepare('SELECT id, tipo, mensagem, status, agendada_para AS agendadaPara FROM notificacoes WHERE paciente_id = ? ORDER BY agendada_para DESC LIMIT 30');
-    $stmt->execute([$id]);
+    $stmt->execute([$patientId]);
     json_response(['success'=>true,'notifications'=>$stmt->fetchAll()]);
 }
 function validar_localizacao_ubs(array $data): array
@@ -1689,6 +1831,7 @@ function login_admin(PDO $pdo, array $data): never
     }
 
     auth_clear_attempts($pdo,$attemptKey);
+    unset($_SESSION['patient'], $_SESSION['professional']);
     session_regenerate_id(true);
     rotate_csrf_token();
     $_SESSION['_auth_created_at']=time(); $_SESSION['_last_activity']=time();

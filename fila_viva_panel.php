@@ -12,6 +12,17 @@
         <strong>Governança e limites:</strong> prioridade clínica é validada por uma conta da Secretaria formalmente autorizada. A plataforma não diagnostica, não calcula prioridade e não decide a ordem clínica. SMS/WhatsApp automático e integração e-SUS APS ainda dependem de autorização, provedor e configuração externa.
     </div>
 
+    <section id="fvPriorityEditor" class="fv-create-card hidden" aria-labelledby="fvPriorityTitle">
+        <div class="fv-subheading"><div><h4 id="fvPriorityTitle">Validar categoria de prioridade legal</h4><p>Selecione somente a categoria reconhecida pela regra municipal. Crianças/adolescentes e pessoas com deficiência aparecem como opções explícitas; a Secretaria valida cada caso. Não inclua diagnóstico ou detalhe clínico.</p></div></div>
+        <input id="fvPriorityReferralId" type="hidden">
+        <div class="fv-form-grid">
+            <div><label for="fvPriorityCategory">Categoria</label><select id="fvPriorityCategory" onchange="alternarOutraPrioridadeFilaViva()"><option value="">Selecione</option><option value="Criança/adolescente">Criança/adolescente</option><option value="Pessoa com deficiência">Pessoa com deficiência</option><option value="outra">Outra prioridade legal aprovada pela Secretaria</option></select></div>
+            <div id="fvPriorityOtherWrap" class="hidden"><label for="fvPriorityOther">Outra categoria aprovada</label><input id="fvPriorityOther" maxlength="100" placeholder="Nome administrativo da categoria"></div>
+            <div><label for="fvPriorityObservation">Observação administrativa opcional</label><textarea id="fvPriorityObservation" maxlength="255" placeholder="Não inclua diagnóstico, CID ou detalhes clínicos"></textarea></div>
+        </div>
+        <div class="actions"><button type="button" class="btn primary" onclick="confirmarPrioridadeFilaViva()">Registrar validação humana</button><button type="button" class="btn secondary" onclick="fecharEditorPrioridadeFilaViva()">Cancelar</button></div>
+    </section>
+
     <section class="fv-filter-card" aria-label="Filtros do painel Fila Viva">
         <div class="fv-filters">
             <div id="fvFilterUnitField"><label for="fvFilterUnit">Unidade</label><select id="fvFilterUnit" onchange="carregarFilaViva()"><option value="">Todas as unidades do escopo</option></select></div>
@@ -26,6 +37,7 @@
         <article class="fv-metric"><span>Encaminhamentos</span><strong id="fvMetricReferrals">—</strong><small>no período</small></article>
         <article class="fv-metric"><span>Na fila</span><strong id="fvMetricWaiting">—</strong><small>solicitações pendentes</small></article>
         <article class="fv-metric"><span>Aguardando validação</span><strong id="fvMetricValidation">—</strong><small>decisão humana necessária</small></article>
+        <article class="fv-metric"><span>Pacientes com prioridade legal</span><strong id="fvMetricLegalPriority">—</strong><small>validação humana; ainda na fila</small></article>
         <article class="fv-metric"><span>Espera média / mediana</span><strong id="fvMetricWait">—</strong><small id="fvMetricWaitSample">sem amostra suficiente</small></article>
         <article class="fv-metric"><span>Agendadas / realizadas</span><strong id="fvMetricAppointments">—</strong><small>no período</small></article>
         <article class="fv-metric"><span>Faltas registradas</span><strong id="fvMetricAbsences">—</strong><small id="fvMetricNoShowRate">taxa indisponível</small></article>
@@ -37,6 +49,16 @@
     <section class="fv-monthly-section">
         <div class="fv-subheading"><div><h4>Evolução mensal</h4><p>Encaminhamentos registrados e consultas realizadas, conforme dados disponíveis.</p></div></div>
         <div id="fvMonthly" class="fv-monthly" aria-live="polite"><div class="info-box">Carregue o painel para visualizar a evolução mensal.</div></div>
+    </section>
+
+    <section class="fv-monthly-section">
+        <div class="fv-subheading"><div><h4>Demanda por especialidade</h4><p>Ordenada por pacientes distintos ainda pendentes no período e escopo selecionados; use-a como sinal de gargalo, não como diagnóstico da causa.</p></div></div>
+        <div id="fvDemandBySpecialty" class="fv-monthly" aria-live="polite"><div class="info-box">Carregue o painel para analisar a demanda por especialidade.</div></div>
+    </section>
+
+    <section class="fv-monthly-section">
+        <div class="fv-subheading"><div><h4>Desempenho operacional por unidade</h4><p>Compara encaminhamentos, pacientes pendentes, atendimentos, faltas e cancelamentos no período. A taxa de falta só usa desfechos registrados.</p></div></div>
+        <div id="fvUnitPerformance" class="fv-monthly" aria-live="polite"><div class="info-box">Carregue o painel para comparar unidades no seu escopo.</div></div>
     </section>
 
     <section class="fv-create-card">

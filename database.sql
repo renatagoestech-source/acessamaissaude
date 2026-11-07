@@ -172,6 +172,23 @@ CREATE TABLE IF NOT EXISTS administradores (
     CONSTRAINT fk_admin_ubs FOREIGN KEY (ubs_id) REFERENCES ubs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS patient_activation_codes (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    paciente_id INT UNSIGNED NOT NULL,
+    ubs_id VARCHAR(20) NOT NULL,
+    codigo_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    issued_by INT UNSIGNED NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_patient_activation_patient (paciente_id, id),
+    INDEX idx_patient_activation_expiry (expires_at),
+    CONSTRAINT fk_patient_activation_patient FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE,
+    CONSTRAINT fk_patient_activation_ubs FOREIGN KEY (ubs_id) REFERENCES ubs(id) ON DELETE CASCADE,
+    CONSTRAINT fk_patient_activation_issuer FOREIGN KEY (issued_by) REFERENCES administradores(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
 ALTER TABLE ubs
     ADD CONSTRAINT fk_ubs_secretaria_owner
     FOREIGN KEY (secretaria_id) REFERENCES administradores(id)

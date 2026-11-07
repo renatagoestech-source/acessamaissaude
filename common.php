@@ -10,17 +10,18 @@ function configure_secure_session(int $cookieLifetime = 0): void
     ini_set('session.use_strict_mode', '1');
     ini_set('session.use_only_cookies', '1');
     ini_set('session.cookie_httponly', '1');
-    ini_set('session.cookie_samesite', 'Lax');
     ini_set('session.cookie_lifetime', (string)$cookieLifetime);
     $https = (!empty($_SERVER['HTTPS']) && strtolower((string)$_SERVER['HTTPS']) !== 'off')
         || (strtolower((string)($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '')) === 'https')
         || getenv('VERCEL') === '1';
+    $sameSite = $https ? 'None' : 'Lax';
+    ini_set('session.cookie_samesite', $sameSite);
     session_set_cookie_params([
         'lifetime' => $cookieLifetime,
         'path' => '/',
         'secure' => $https,
         'httponly' => true,
-        'samesite' => 'Lax',
+        'samesite' => $sameSite,
     ]);
     date_default_timezone_set('America/Sao_Paulo');
 }
@@ -147,7 +148,7 @@ function configure_database_session_handler(PDO $pdo): void
 
 function enforce_session_lifetime(): void
 {
-    $hasAuth = !empty($_SESSION['professional']) || !empty($_SESSION['admin']);
+    $hasAuth = !empty($_SESSION['professional']) || !empty($_SESSION['admin']) || !empty($_SESSION['patient']);
     if (!$hasAuth) return;
     // Mantém a sessão profissional durante o trabalho; o botão Sair continua encerrando o acesso.
     if (!empty($_SESSION['professional'])) {
