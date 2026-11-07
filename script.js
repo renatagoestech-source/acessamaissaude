@@ -181,7 +181,7 @@ async function api(action, options = {}) {
     delete config.__retryProfessionalSession;
     config.credentials = "same-origin";
     const method = String(config.method || "GET").toUpperCase();
-    const csrfRequired = method === "POST" && action !== "asaas_webhook" && !action.startsWith("professional_");
+    const csrfRequired = method === "POST" && action !== "asaas_webhook";
     if (csrfRequired) config.headers["X-CSRF-Token"] = await obterTokenCSRF();
     if (config.body instanceof FormData) {
         // O navegador define automaticamente o Content-Type e o boundary.

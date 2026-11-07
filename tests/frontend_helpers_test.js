@@ -29,6 +29,9 @@ assert.match(js, /function carregarMunicipiosSecretaria\(/, 'O seletor de cidade
 assert.match(apiSource, /INSERT INTO administradores \(usuario,senha_hash,tipo,ubs_id,cidade,estado\)/, 'A localização escolhida deve ser salva na conta da Secretaria.');
 assert.match(apiSource, /SELECT cidade, estado FROM administradores WHERE id=\? AND tipo='secretaria'/, 'A API deve obter a localização da própria Secretaria autenticada.');
 assert.match(apiSource, /UPDATE administradores SET cidade=\?,estado=\? WHERE id=\? AND tipo='secretaria'/, 'Contas antigas recebem localização ao criarem a primeira UBS.');
+assert.match(apiSource, /\$requiresCsrf = \$_SERVER\['REQUEST_METHOD'\] === 'POST' && \$action !== 'asaas_webhook';/, 'Toda mutação da API, exceto o webhook assinado, deve exigir CSRF.');
+assert.match(js, /const csrfRequired = method === "POST" && action !== "asaas_webhook";/, 'O wrapper deve enviar CSRF também para mutações professional_*.');
+assert.doesNotMatch(apiSource, /!str_starts_with\(\(string\)\$action, 'professional_'\)/, 'Ações professional_* não podem ser dispensadas da proteção CSRF.');
 const definitions = new Set([
   ...Array.from(js.matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g), match => match[1]),
   ...Array.from(js.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\(?[^=]*=>)/g), match => match[1]),

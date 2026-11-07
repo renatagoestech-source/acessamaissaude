@@ -15,8 +15,8 @@ try {
     enforce_session_lifetime();
     validate_professional_session($pdo);
     if ($isProfessionalAction) refresh_professional_session_cookie();
-    // As ações da clínica usam autenticação profissional; UBS e demais POSTs mantêm CSRF.
-    $requiresCsrf = $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'asaas_webhook' && !str_starts_with((string)$action, 'professional_');
+    // Toda mutação do navegador exige CSRF; o webhook usa a assinatura do provedor.
+    $requiresCsrf = $_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'asaas_webhook';
     if ($requiresCsrf) require_csrf();
     switch ($action) {
         case 'csrf_token': json_response(['success'=>true,'csrf_token'=>$_SESSION['_csrf_token'] ?? rotate_csrf_token()]); break;
